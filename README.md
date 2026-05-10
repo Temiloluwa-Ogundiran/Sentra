@@ -380,6 +380,7 @@ Readiness can optionally require SageMaker endpoint configuration with:
 
 - `READINESS_REQUIRE_SAGEMAKER=true`
 
+
 ## Squad integration
 
 Squad is used for credit recharge payments.
