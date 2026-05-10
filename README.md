@@ -64,7 +64,7 @@ flowchart LR
 
   subgraph Hosted Inference
     QWEN[SageMaker artifact reasoner]
-    TRUFOR[SageMaker tamper detector]
+    TAMPER[SageMaker tamper detector]
     SYN[SageMaker synthetic-artifact detector]
   end
 
@@ -73,7 +73,7 @@ flowchart LR
   end
 
   U --> G --> API
-  API --> Q --> OCR --> R --> QWEN --> TRUFOR --> SYN --> FUSION
+  API --> Q --> OCR --> R --> QWEN --> TAMPER --> SYN --> FUSION
   API --> DB
   API --> FS
   FUSION --> G --> U
@@ -182,8 +182,8 @@ The application implements a multi-branch verification pipeline with artifact cl
   - artifact classification across bank alert screenshots, SMS alert screenshots, receipt screenshots, and rendered PDF receipts
 - `microsoft/layoutlmv3-base`
   - structural trust classification using image, text, and layout signals
-- `TruFor`
-  - tamper localization and manipulation signal extraction
+- `IrishMehta/fraud-detection-idnet-three-class`
+  - tamper and document-fraud classification for manipulated proof artifacts
 - `TrOCR`
   - OCR baseline for document and payment-proof text extraction
 - `Sumsub/Sumsub-ffs-synthetic-2.0`
@@ -310,7 +310,7 @@ flowchart TD
   - named datasets used by the system
 - `ml/training/train_artifact_classifier.py`
 - `ml/training/train_trust_classifier.py`
-- `ml/training/train_trufor_adapter.py`
+- `ml/training/train_tamper_detector_adapter.py`
 - `ml/evaluation/evaluate_pipeline.py`
 
 ## Database model

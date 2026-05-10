@@ -215,13 +215,13 @@
       "updated": 1,
       "link": null,
       "locked": false,
-      "text": "FastAPI Monolith\n\n1. Ingest media\n2. Persist artifact + request\n3. Queue background job\n4. Run EasyOCR\n5. Run rules engine\n6. Call SageMaker Qwen endpoint\n7. Call SageMaker TruFor endpoint\n8. Fuse verdict\n9. Annotate artifact\n10. Send result via GOWA\n\nDev endpoint mirrors the same result schema",
+      "text": "FastAPI Monolith\n\n1. Ingest media\n2. Persist artifact + request\n3. Queue background job\n4. Run EasyOCR\n5. Run rules engine\n6. Call SageMaker artifact reasoner\n7. Call SageMaker tamper detector\n8. Call SageMaker synthetic detector\n9. Fuse verdict\n10. Annotate artifact\n11. Send result via GOWA\n\nDev endpoint mirrors the same result schema",
       "fontSize": 20,
       "fontFamily": 1,
       "textAlign": "left",
       "verticalAlign": "top",
       "containerId": null,
-      "originalText": "FastAPI Monolith\n\n1. Ingest media\n2. Persist artifact + request\n3. Queue background job\n4. Run EasyOCR\n5. Run rules engine\n6. Call SageMaker Qwen endpoint\n7. Call SageMaker TruFor endpoint\n8. Fuse verdict\n9. Annotate artifact\n10. Send result via GOWA\n\nDev endpoint mirrors the same result schema",
+      "originalText": "FastAPI Monolith\n\n1. Ingest media\n2. Persist artifact + request\n3. Queue background job\n4. Run EasyOCR\n5. Run rules engine\n6. Call SageMaker artifact reasoner\n7. Call SageMaker tamper detector\n8. Call SageMaker synthetic detector\n9. Fuse verdict\n10. Annotate artifact\n11. Send result via GOWA\n\nDev endpoint mirrors the same result schema",
       "lineHeight": 1.25
     },
     {
@@ -339,13 +339,13 @@
       "updated": 1,
       "link": null,
       "locked": false,
-      "text": "AWS SageMaker\nQwen2.5-VL-3B-Instruct\nTruFor\n\nHeavy reasoning + tamper map\nCPU-safe by offloading inference",
+      "text": "AWS SageMaker\nQwen2.5-VL-3B-Instruct\nIrishMehta/fraud-detection-idnet-three-class\nSumsub/Sumsub-ffs-synthetic-2.0\n\nHosted reasoning + tamper + synthetic detection",
       "fontSize": 20,
       "fontFamily": 1,
       "textAlign": "center",
       "verticalAlign": "middle",
       "containerId": null,
-      "originalText": "AWS SageMaker\nQwen2.5-VL-3B-Instruct\nTruFor\n\nHeavy reasoning + tamper map\nCPU-safe by offloading inference",
+      "originalText": "AWS SageMaker\nQwen2.5-VL-3B-Instruct\nIrishMehta/fraud-detection-idnet-three-class\nSumsub/Sumsub-ffs-synthetic-2.0\n\nHosted reasoning + tamper + synthetic detection",
       "lineHeight": 1.25
     },
     {
