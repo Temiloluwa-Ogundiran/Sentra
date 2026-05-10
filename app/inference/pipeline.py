@@ -4,14 +4,14 @@ from time import perf_counter
 from app.inference.annotate import annotate_artifact
 from app.inference.artifact_classifier import classify_artifact
 from app.inference.fusion import fuse_result
+from app.inference.hosted_runtime import (
+    call_artifact_reasoner,
+    call_synthetic_artifact_detector,
+    call_tamper_detector,
+)
 from app.inference.ocr import run_ocr
 from app.inference.quality import assess_quality
 from app.inference.rules import run_rules
-from app.inference.sagemaker_runtime import (
-    call_artifact_reasoner_endpoint,
-    call_synthetic_artifact_detector_endpoint,
-    call_tamper_detector_endpoint,
-)
 from app.schemas.common import CanonicalResult
 
 
@@ -21,9 +21,9 @@ def run_pipeline(request_id: int, file_path: Path, mime_type: str, expected_amou
     quality_flags = assess_quality(file_path)
     raw_text, extracted_fields = run_ocr(file_path)
     rule_hits, reasons = run_rules(artifact_type, raw_text, quality_flags)
-    reasoner_response = call_artifact_reasoner_endpoint(file_path, artifact_type)
-    tamper_response = call_tamper_detector_endpoint(file_path)
-    synthetic_response = call_synthetic_artifact_detector_endpoint(file_path, artifact_type)
+    reasoner_response = call_artifact_reasoner(file_path, artifact_type)
+    tamper_response = call_tamper_detector(file_path)
+    synthetic_response = call_synthetic_artifact_detector(file_path, artifact_type)
     if reasoner_response.get("status") == "skipped":
         reasons.append("Hosted artifact reasoning was not configured.")
     if tamper_response.get("status") == "skipped":
@@ -34,6 +34,13 @@ def run_pipeline(request_id: int, file_path: Path, mime_type: str, expected_amou
     if isinstance(synthetic_probability, (int, float)) and synthetic_probability >= 0.7:
         reasons.append("This proof contains signals consistent with AI-generated or synthetic content.")
         quality_flags.append("synthetic_artifact_signal")
+    tamper_probability = tamper_response.get("tamper_probability")
+    if isinstance(tamper_probability, (int, float)) and tamper_probability >= 0.7:
+        reasons.append("This proof contains strong signals of manipulation or fraudulent editing.")
+        quality_flags.append("tamper_signal")
+    reasoner_summary = reasoner_response.get("summary") or reasoner_response.get("raw_text")
+    if isinstance(reasoner_summary, str) and reasoner_summary.strip():
+        reasons.append(reasoner_summary.strip())
     annotated = annotate_artifact(file_path, artifact_type, reasons, request_id)
     processing_time_ms = int((perf_counter() - started) * 1000)
     result = fuse_result(

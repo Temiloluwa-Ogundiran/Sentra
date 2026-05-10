@@ -19,7 +19,7 @@ def fuse_result(
     if "unreadable_artifact" in quality_flags or "low_resolution" in quality_flags:
         verdict = "Review"
         action = REVIEW_ACTION
-    elif "synthetic_artifact_signal" in quality_flags:
+    elif "synthetic_artifact_signal" in quality_flags or "tamper_signal" in quality_flags:
         verdict = "Suspicious"
         action = SUSPICIOUS_ACTION
     elif any("missing" in reason.lower() for reason in reasons):

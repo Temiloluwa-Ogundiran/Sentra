@@ -9,7 +9,6 @@ __pycache__/
 *.sqlite3
 *.db
 .env
-.env
 docs/
 Challenge Guide Book.pdf
 Challenge Guide Book.extracted.txt
@@ -26,6 +25,7 @@ deployment/*.json
 deployment/*.tfstate
 deployment/*.tfstate.*
 deployment/.terraform/
+terraform/
 scripts/deploy_sagemaker_models.py
 !storage/uploads/.gitkeep
 !storage/rendered/.gitkeep

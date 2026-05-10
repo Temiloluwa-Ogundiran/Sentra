@@ -27,9 +27,9 @@ flowchart LR
   E --> F[Artifact classification]
   F --> G[EasyOCR + normalized fields]
   G --> H[Rules engine]
-  H --> I[SageMaker artifact reasoner]
-  I --> J[SageMaker tamper detector]
-  J --> K[SageMaker synthetic-artifact detector]
+  H --> I[Artifact reasoner]
+  I --> J[Tamper detector]
+  J --> K[Synthetic-artifact detector]
   K --> L[Deterministic fusion]
   L --> M[Annotated preview + action]
   M --> N[GOWA sends result back to seller]
@@ -62,10 +62,10 @@ flowchart LR
     FS[(Mounted storage)]
   end
 
-  subgraph Hosted Inference
-    QWEN[SageMaker artifact reasoner]
-    TAMPER[SageMaker tamper detector]
-    SYN[SageMaker synthetic-artifact detector]
+  subgraph Model Layer
+    REASONER[Artifact reasoner]
+    TAMPER[Tamper detector]
+    SYN[Synthetic-artifact detector]
   end
 
   subgraph Business Layer
@@ -73,7 +73,7 @@ flowchart LR
   end
 
   U --> G --> API
-  API --> Q --> OCR --> R --> QWEN --> TAMPER --> SYN --> FUSION
+  API --> Q --> OCR --> R --> REASONER --> TAMPER --> SYN --> FUSION
   API --> DB
   API --> FS
   FUSION --> G --> U
@@ -87,9 +87,7 @@ flowchart LR
 - `Postgres` stores users, verification requests, artifacts, extractions, analysis results, and credit wallets
 - `Mounted storage` stores uploads, rendered files, and annotated outputs
 - `EasyOCR` runs locally
-- hosted artifact reasoner runs on SageMaker for artifact-aware reasoning
-- hosted tamper detector runs on SageMaker for tamper analysis and suspicious-region support
-- hosted synthetic-artifact detector runs on SageMaker for AI-generated or synthetic proof detection
+- the reasoning and detector layers run as hosted model services
 - `Squad` is used for credit recharge payments
 
 ## Input contract
@@ -211,6 +209,106 @@ The application implements a multi-branch verification pipeline with artifact cl
   - compression and crop variants
   - region-level replacements
 
+### Training and fine-tuning pipeline
+
+The model stack is split into fine-tuned task-specific components and pretrained support components.
+
+#### Fine-tuned models
+
+- `microsoft/dit-base`
+  - fine-tuned for artifact classification
+  - target classes:
+    - bank alert screenshot
+    - SMS alert screenshot
+    - payment receipt screenshot
+    - rendered receipt PDF
+    - unknown
+- `microsoft/layoutlmv3-base`
+  - fine-tuned for structural trust classification
+  - learns from image, OCR text, and layout structure
+  - optimized to separate:
+    - manipulated or fraudulent proofs
+    - structurally coherent proofs
+    - uncertain or degraded proofs that later map to `Review`
+
+#### Pretrained models used without fine-tuning
+
+- `IrishMehta/fraud-detection-idnet-three-class`
+  - used as a tamper or manipulated-proof detector
+  - contributes fraud-manipulation signal to fusion
+- `Sumsub/Sumsub-ffs-synthetic-2.0`
+  - used as the synthetic or AI-generated artifact detector
+  - contributes synthetic-content signal to fusion
+- `TrOCR`
+  - used as the OCR baseline for text extraction and field normalization
+
+#### Data assembly strategy
+
+The training corpus is assembled in three layers:
+
+- public supervision layer
+  - `CORD`
+  - `SROIE`
+  - `Find it Again!`
+  - `DocTamper`
+- local Nigerian reference layer
+  - anonymized bank alert screenshots
+  - anonymized SMS alert screenshots
+  - anonymized payment receipt screenshots
+  - anonymized receipt PDFs rendered to image
+- synthetic tampering layer
+  - amount edits
+  - date/time edits
+  - reference edits
+  - crop and compression variants
+  - region replacements
+  - forwarding-style degradations
+
+#### Fine-tuning flow
+
+```mermaid
+flowchart TD
+  A[Public datasets] --> D[Unified artifact corpus]
+  B[Local Nigerian references] --> D
+  C[Synthetic tampered samples] --> D
+  D --> E[Preprocessing and normalization]
+  E --> F[Train/validation/test split]
+  F --> G[Fine-tune DiT artifact classifier]
+  F --> H[Fine-tune LayoutLMv3 trust classifier]
+  G --> I[Artifact type prediction]
+  H --> J[Trust structure prediction]
+  I --> K[Deterministic fusion layer]
+  J --> K
+  L[TrOCR OCR baseline] --> K
+  M[IrishMehta tamper detector] --> K
+  N[Sumsub synthetic detector] --> K
+  K --> O[Suspicious]
+  K --> P[Review]
+  K --> Q[High-confidence pattern match]
+```
+
+#### Training mechanics
+
+- artifact images are normalized into a common visual format before training
+- PDF receipts are rendered to images before entering the corpus
+- OCR text is aligned with layout structure for `LayoutLMv3`
+- tampered examples are labeled at artifact level, with edited-field metadata when available
+- quality-degraded samples are included so the system learns to defer to `Review` rather than overconfidently classify
+
+#### Evaluation
+
+- `DiT` artifact classifier
+  - accuracy
+  - confusion matrix by artifact type
+- `LayoutLMv3` trust classifier
+  - precision
+  - recall
+  - F1 on manipulated vs coherent proofs
+- end-to-end verification pipeline
+  - verdict correctness on holdout cases
+  - OCR key-field extraction coverage
+  - latency by artifact type
+
 ### Decision logic
 
 ```mermaid
@@ -285,8 +383,8 @@ flowchart TD
   - quality flags
 - `rules.py`
   - artifact-specific deterministic checks
-- `sagemaker_runtime.py`
-  - generic model-role endpoint clients
+- `hosted_runtime.py`
+  - hosted model adapters
 - `fusion.py`
   - final verdict mapping
 - `annotate.py`
@@ -299,8 +397,10 @@ flowchart TD
 - `gowa.py`
   - send/receive WhatsApp messages and files
   - GoWA basic-auth + device-ID integration
+- `bedrock.py`
+  - multimodal reasoning client
 - `sagemaker.py`
-  - invoke hosted inference
+  - classifier endpoint client
 - `squad.py`
   - credit recharge payment setup
 
@@ -362,23 +462,24 @@ GoWA deployment assumptions:
 - persistent WhatsApp state is stored through `DB_URI`
 - webhook delivery uses `WHATSAPP_WEBHOOK`
 
-## SageMaker integration
+## Hosted inference integration
 
-Sentra expects three endpoints:
+Sentra uses three hosted model roles:
 
-- `MODEL_ARTIFACT_REASONER_ENDPOINT`
-- `MODEL_TAMPER_DETECTOR_ENDPOINT`
-- `MODEL_SYNTHETIC_ARTIFACT_DETECTOR_ENDPOINT`
+- artifact reasoner
+- tamper detector
+- synthetic-artifact detector
 
 Runtime behavior:
 
-- FastAPI sends structured JSON payloads to SageMaker
-- SageMaker returns hosted inference results
+- FastAPI sends structured payloads to the hosted model services
+- the hosted services return inference results
 - FastAPI fuses them with OCR and rules
 
-Readiness can optionally require SageMaker endpoint configuration with:
+Readiness can optionally require hosted model configuration with:
 
-- `READINESS_REQUIRE_SAGEMAKER=true`
+- hosted detector configuration
+- hosted reasoning configuration
 
 
 ## Squad integration
@@ -412,7 +513,7 @@ Set:
 - `GOWA_BASIC_AUTH_PASSWORD`
 - `GOWA_DEVICE_ID`
 - `AWS_REGION`
-- `MODEL_ARTIFACT_REASONER_ENDPOINT`
+- `BEDROCK_ARTIFACT_REASONER_MODEL_ID`
 - `MODEL_TAMPER_DETECTOR_ENDPOINT`
 - `MODEL_SYNTHETIC_ARTIFACT_DETECTOR_ENDPOINT`
 - `AWS_ACCESS_KEY_ID`
@@ -447,7 +548,7 @@ Automated tests cover:
 - readiness response shape
 - WhatsApp message rendering
 - dev upload endpoint smoke behavior
-- SageMaker config presence
+- hosted model config presence
 
 There is also a live integration test:
 
@@ -469,7 +570,7 @@ pytest
   - database
   - OCR runtime
   - storage
-  - optional SageMaker endpoint configuration
+  - optional hosted model configuration
 
 ## Challenge 01 fit
 
@@ -484,4 +585,4 @@ Sentra aligns with the challenge requirements by:
 
 ## Judge-facing summary
 
-Sentra is a WhatsApp-first fraud risk detector for proof-of-payment artifacts. It helps Nigerian online sellers screen screenshots and receipt documents before releasing goods. The runtime uses OCR plus hosted visual reasoning, tamper analysis, and synthetic-artifact detection, and uses Squad to recharge seller verification credits.
+Sentra is a WhatsApp-first fraud risk detector for proof-of-payment artifacts. It helps Nigerian online sellers screen screenshots and receipt documents before releasing goods. The system combines OCR, structural reasoning, tamper analysis, and synthetic-artifact detection, and uses Squad to recharge seller verification credits.

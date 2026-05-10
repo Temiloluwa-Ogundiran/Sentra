@@ -16,13 +16,14 @@ class Settings(BaseSettings):
     squad_secret_key: str = ""
     squad_public_key: str = ""
     aws_region: str = "us-east-1"
-    model_artifact_reasoner_endpoint: str = ""
+    bedrock_artifact_reasoner_model_id: str = "amazon.nova-lite-v1:0"
     model_tamper_detector_endpoint: str = ""
     model_synthetic_artifact_detector_endpoint: str = ""
     aws_access_key_id: str = ""
     aws_secret_access_key: str = ""
     aws_session_token: str = ""
     readiness_require_sagemaker: bool = False
+    readiness_require_bedrock: bool = False
 
     model_config = SettingsConfigDict(env_file=".env", case_sensitive=False)
 
