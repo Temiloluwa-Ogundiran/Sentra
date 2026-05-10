@@ -1,0 +1,48 @@
+services:
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    env_file:
+      - .env
+    environment:
+      DATABASE_URL: postgresql+psycopg://sentra:sentra@postgres:5432/sentra
+      STORAGE_ROOT: /app/storage
+      GOWA_BASE_URL: http://gowa:3000
+    expose:
+      - "8000"
+    depends_on:
+      - postgres
+      - gowa
+    volumes:
+      - ./storage:/app/storage
+      - ./models:/app/models
+
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: sentra
+      POSTGRES_USER: sentra
+      POSTGRES_PASSWORD: sentra
+    expose:
+      - "5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+  gowa:
+    image: ghcr.io/aldinokemal/go-whatsapp-web-multidevice:latest
+    env_file:
+      - .env
+    environment:
+      APP_PORT: 3000
+      APP_DEBUG: "true"
+      APP_BASIC_AUTH: ${GOWA_BASIC_AUTH_USER}:${GOWA_BASIC_AUTH_PASSWORD}
+      DB_URI: file:/app/storages/whatsapp.db?_foreign_keys=on
+      WHATSAPP_WEBHOOK: http://api:8000/api/webhooks/gowa
+    expose:
+      - "3000"
+    volumes:
+      - ./gowa-data:/app/storages
+
+volumes:
+  postgres_data:

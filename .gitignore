@@ -1,0 +1,26 @@
+.venv/
+__pycache__/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+*.pyc
+*.pyo
+*.pyd
+*.sqlite3
+*.db
+.env
+.env
+docs/
+Challenge Guide Book.pdf
+Challenge Guide Book.extracted.txt
+.claude/
+AGENTS.md
+agents.md
+storage/uploads/*
+storage/rendered/*
+storage/annotated/*
+gowa-data/*
+!storage/uploads/.gitkeep
+!storage/rendered/.gitkeep
+!storage/annotated/.gitkeep
+!gowa-data/.gitkeep
