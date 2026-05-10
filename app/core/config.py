@@ -12,7 +12,7 @@ class Settings(BaseSettings):
     gowa_basic_auth_user: str = ""
     gowa_basic_auth_password: str = ""
     gowa_device_id: str = ""
-    squad_base_url: str = "https://api.squadco.com"
+    squad_base_url: str = "https://sandbox-api-d.squadco.com"
     squad_secret_key: str = ""
     squad_public_key: str = ""
     aws_region: str = "us-east-1"
