@@ -7,7 +7,7 @@ from app.core.config import settings
 
 class ModalClient:
     def __init__(self) -> None:
-        self.timeout = httpx.Timeout(60.0, connect=10.0)
+        self.timeout = httpx.Timeout(180.0, connect=20.0)
         self.headers = {"Content-Type": "application/json"}
 
     def invoke_json(self, endpoint_url: str, payload: dict) -> dict:
@@ -16,6 +16,7 @@ class ModalClient:
             headers=self.headers,
             content=json.dumps(payload).encode("utf-8"),
             timeout=self.timeout,
+            follow_redirects=True,
         )
         response.raise_for_status()
         try:

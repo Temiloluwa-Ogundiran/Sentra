@@ -39,6 +39,7 @@ services:
       APP_BASIC_AUTH: ${GOWA_BASIC_AUTH_USER}:${GOWA_BASIC_AUTH_PASSWORD}
       DB_URI: file:/app/storages/whatsapp.db?_foreign_keys=on
       WHATSAPP_WEBHOOK: http://api:8000/api/webhooks/gowa
+      WHATSAPP_WEBHOOK_EVENTS: message,message.ack
     expose:
       - "3000"
     volumes:
