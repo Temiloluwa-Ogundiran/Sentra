@@ -28,17 +28,13 @@ def get_readiness_status() -> dict:
     except Exception as exc:
         checks["storage"] = f"error:{exc}"
 
-    if settings.readiness_require_bedrock:
-        checks["bedrock"] = (
-            "ok" if settings.bedrock_artifact_reasoner_model_id else "error:missing_model_configuration"
-        )
-
-    if settings.readiness_require_sagemaker:
-        checks["sagemaker"] = (
+    if settings.readiness_require_hosted:
+        checks["hosted_inference"] = (
             "ok"
             if (
-                settings.model_tamper_detector_endpoint
-                and settings.model_synthetic_artifact_detector_endpoint
+                settings.hosted_artifact_reasoner_url
+                and settings.hosted_tamper_detector_url
+                and settings.hosted_synthetic_artifact_detector_url
             )
             else "error:missing_endpoint_configuration"
         )

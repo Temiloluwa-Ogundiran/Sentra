@@ -2,32 +2,31 @@ import os
 
 import pytest
 
-from app.integrations.bedrock import BedrockClient
-from app.integrations.sagemaker import SageMakerClient
+from app.integrations.modal import ModalClient
 
 
 @pytest.mark.skipif(
     not (
-        os.getenv("AWS_ACCESS_KEY_ID")
-        and os.getenv("AWS_SECRET_ACCESS_KEY")
-        and os.getenv("MODEL_TAMPER_DETECTOR_ENDPOINT")
+        os.getenv("HOSTED_TAMPER_DETECTOR_URL")
     ),
-    reason="Live SageMaker credentials/endpoints not configured",
+    reason="Live hosted detector URL not configured",
 )
-def test_live_sagemaker_connection():
-    client = SageMakerClient()
-    response = client.invoke_json(os.environ["MODEL_TAMPER_DETECTOR_ENDPOINT"], {"ping": True})
+def test_live_hosted_detector_connection():
+    client = ModalClient()
+    response = client.invoke_json(os.environ["HOSTED_TAMPER_DETECTOR_URL"], {"ping": True})
     assert response is not None
 
 
 @pytest.mark.skipif(
     not (
-        os.getenv("AWS_ACCESS_KEY_ID")
-        and os.getenv("AWS_SECRET_ACCESS_KEY")
-        and os.getenv("BEDROCK_ARTIFACT_REASONER_MODEL_ID")
+        os.getenv("HOSTED_ARTIFACT_REASONER_URL")
     ),
-    reason="Live Bedrock model configuration not present",
+    reason="Live hosted reasoner URL not present",
 )
-def test_live_bedrock_client_instantiates():
-    client = BedrockClient()
-    assert client.runtime is not None
+def test_live_hosted_reasoner_connection():
+    client = ModalClient()
+    response = client.invoke_json(
+        os.environ["HOSTED_ARTIFACT_REASONER_URL"],
+        {"ping": True},
+    )
+    assert response is not None

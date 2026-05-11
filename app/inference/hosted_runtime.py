@@ -2,26 +2,28 @@ from pathlib import Path
 
 from app.core.config import settings
 from app.inference.visual_payload import prepare_visual_payload
-from app.integrations.bedrock import BedrockClient
-from app.integrations.sagemaker import SageMakerClient
+from app.integrations.modal import ModalClient
 
 
 def call_artifact_reasoner(file_path: Path, artifact_type: str) -> dict:
-    if not settings.bedrock_artifact_reasoner_model_id:
-        return {"status": "skipped", "reason": "missing_model_id"}
+    if not settings.hosted_artifact_reasoner_url:
+        return {"status": "skipped", "reason": "missing_url"}
 
-    _, image_bytes, image_format = prepare_visual_payload(file_path)
+    image_base64, _, image_format = prepare_visual_payload(file_path)
     prompt = (
         "You are analyzing a payment-proof artifact for fraud risk. "
         f"Artifact type guess: {artifact_type}. "
         "Return concise JSON with keys: artifact_type_guess, suspicious_signals, trust_cues, summary."
     )
-    client = BedrockClient()
-    return client.analyze_artifact(
-        settings.bedrock_artifact_reasoner_model_id,
-        image_bytes=image_bytes,
-        image_format=image_format,
-        prompt=prompt,
+    client = ModalClient()
+    return client.invoke_json(
+        settings.hosted_artifact_reasoner_url,
+        {
+            "image_base64": image_base64,
+            "image_format": image_format,
+            "artifact_type": artifact_type,
+            "prompt": prompt,
+        },
     )
 
 
@@ -36,13 +38,13 @@ def _extract_probability(predictions: list[dict], positive_terms: tuple[str, ...
 
 
 def call_tamper_detector(file_path: Path) -> dict:
-    if not settings.model_tamper_detector_endpoint:
-        return {"status": "skipped", "reason": "missing_endpoint"}
+    if not settings.hosted_tamper_detector_url:
+        return {"status": "skipped", "reason": "missing_url"}
 
     image_base64, _, _ = prepare_visual_payload(file_path)
-    client = SageMakerClient()
+    client = ModalClient()
     response = client.invoke_json(
-        settings.model_tamper_detector_endpoint,
+        settings.hosted_tamper_detector_url,
         {"image_base64": image_base64},
     )
     predictions = response.get("predictions", [])
@@ -55,13 +57,13 @@ def call_tamper_detector(file_path: Path) -> dict:
 
 
 def call_synthetic_artifact_detector(file_path: Path, artifact_type: str) -> dict:
-    if not settings.model_synthetic_artifact_detector_endpoint:
-        return {"status": "skipped", "reason": "missing_endpoint"}
+    if not settings.hosted_synthetic_artifact_detector_url:
+        return {"status": "skipped", "reason": "missing_url"}
 
     image_base64, _, _ = prepare_visual_payload(file_path)
-    client = SageMakerClient()
+    client = ModalClient()
     response = client.invoke_json(
-        settings.model_synthetic_artifact_detector_endpoint,
+        settings.hosted_synthetic_artifact_detector_url,
         {"image_base64": image_base64, "artifact_type": artifact_type},
     )
     predictions = response.get("predictions", [])

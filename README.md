@@ -397,10 +397,8 @@ flowchart TD
 - `gowa.py`
   - send/receive WhatsApp messages and files
   - GoWA basic-auth + device-ID integration
-- `bedrock.py`
-  - multimodal reasoning client
-- `sagemaker.py`
-  - classifier endpoint client
+- hosted inference clients
+  - runtime adapters for reasoning and detector services
 - `squad.py`
   - credit recharge payment setup
 
@@ -448,39 +446,12 @@ The codebase includes:
 - a GOWA client
 - a message renderer
 
-Configured environment:
-
-- `GOWA_BASE_URL`
-- `GOWA_BASIC_AUTH_USER`
-- `GOWA_BASIC_AUTH_PASSWORD`
-- `GOWA_DEVICE_ID`
-
 GoWA deployment assumptions:
 
 - basic auth is configured through `APP_BASIC_AUTH`
 - device routing is handled through `X-Device-Id`
 - persistent WhatsApp state is stored through `DB_URI`
 - webhook delivery uses `WHATSAPP_WEBHOOK`
-
-## Hosted inference integration
-
-Sentra uses three hosted model roles:
-
-- artifact reasoner
-- tamper detector
-- synthetic-artifact detector
-
-Runtime behavior:
-
-- FastAPI sends structured payloads to the hosted model services
-- the hosted services return inference results
-- FastAPI fuses them with OCR and rules
-
-Readiness can optionally require hosted model configuration with:
-
-- hosted detector configuration
-- hosted reasoning configuration
-
 
 ## Squad integration
 
@@ -512,13 +483,8 @@ Set:
 - `GOWA_BASIC_AUTH_USER`
 - `GOWA_BASIC_AUTH_PASSWORD`
 - `GOWA_DEVICE_ID`
-- `AWS_REGION`
-- `BEDROCK_ARTIFACT_REASONER_MODEL_ID`
-- `MODEL_TAMPER_DETECTOR_ENDPOINT`
-- `MODEL_SYNTHETIC_ARTIFACT_DETECTOR_ENDPOINT`
-- `AWS_ACCESS_KEY_ID`
-- `AWS_SECRET_ACCESS_KEY`
 - optional Squad keys
+- hosted model credentials and URLs
 
 ### 3. Run locally
 
@@ -526,7 +492,15 @@ Set:
 uvicorn app.main:app --reload
 ```
 
-### 4. Run with Docker Compose
+### 4. Deploy hosted inference
+
+```bash
+python scripts/deploy_modal_endpoints.py
+```
+
+Copy the printed URLs into `.env`.
+
+### 5. Run with Docker Compose
 
 ```bash
 docker compose up --build
@@ -550,11 +524,11 @@ Automated tests cover:
 - dev upload endpoint smoke behavior
 - hosted model config presence
 
-There is also a live integration test:
+There are also live integration checks:
 
 - `tests/test_live_integrations.py`
 
-It only runs when real AWS credentials and endpoint names are present in the environment.
+They only run when real cloud credentials and hosted model configuration are present in the environment.
 
 Run tests:
 

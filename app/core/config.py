@@ -15,17 +15,13 @@ class Settings(BaseSettings):
     squad_base_url: str = "https://sandbox-api-d.squadco.com"
     squad_secret_key: str = ""
     squad_public_key: str = ""
-    aws_region: str = "us-east-1"
-    bedrock_artifact_reasoner_model_id: str = "amazon.nova-lite-v1:0"
-    model_tamper_detector_endpoint: str = ""
-    model_synthetic_artifact_detector_endpoint: str = ""
-    aws_access_key_id: str = ""
-    aws_secret_access_key: str = ""
-    aws_session_token: str = ""
-    readiness_require_sagemaker: bool = False
-    readiness_require_bedrock: bool = False
+    hosted_api_key: str = ""
+    hosted_artifact_reasoner_url: str = ""
+    hosted_tamper_detector_url: str = ""
+    hosted_synthetic_artifact_detector_url: str = ""
+    readiness_require_hosted: bool = False
 
-    model_config = SettingsConfigDict(env_file=".env", case_sensitive=False)
+    model_config = SettingsConfigDict(env_file=".env", case_sensitive=False, extra="ignore")
 
 
 settings = Settings()

@@ -31,3 +31,5 @@ scripts/deploy_sagemaker_models.py
 !storage/rendered/.gitkeep
 !storage/annotated/.gitkeep
 !gowa-data/.gitkeep
+modal_apps/
+scripts/deploy_modal_endpoints.py
