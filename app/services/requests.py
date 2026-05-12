@@ -1,4 +1,5 @@
 from pathlib import Path
+from mimetypes import guess_type
 
 from fastapi import UploadFile
 from sqlalchemy.orm import Session
@@ -11,6 +12,89 @@ from app.models.user import User
 from app.models.verification_request import VerificationRequest
 from app.schemas.common import CanonicalResult
 from app.services.storage import persist_bytes, persist_upload
+from app.services.wallets import consume_verification_credit, get_or_create_wallet
+
+SUPPORTED_MIME_TYPES = {
+    "image/jpeg",
+    "image/jpg",
+    "image/png",
+    "application/pdf",
+}
+
+
+def _create_request_record(
+    db: Session,
+    whatsapp_id: str,
+    caption: str | None,
+    expected_amount: str | None = None,
+) -> VerificationRequest:
+    user = get_or_create_user(db, whatsapp_id)
+    request = VerificationRequest(
+        user_id=user.id,
+        status="received",
+        caption=caption,
+        expected_amount=float(expected_amount) if expected_amount else None,
+    )
+    db.add(request)
+    db.commit()
+    db.refresh(request)
+    return request
+
+
+def _create_artifact_record(
+    db: Session,
+    request_id: int,
+    source_path: Path,
+    mime_type: str,
+    original_filename: str,
+    file_size: int,
+) -> Artifact:
+    artifact = Artifact(
+        request_id=request_id,
+        source_path=str(source_path),
+        mime_type=mime_type,
+        original_filename=original_filename,
+        file_size=file_size,
+    )
+    db.add(artifact)
+    db.commit()
+    db.refresh(artifact)
+    return artifact
+
+
+def _guess_mime_type(filename: str, fallback: str | None = None) -> str:
+    guessed, _ = guess_type(filename)
+    return (fallback or guessed or "application/octet-stream").lower()
+
+
+def _extract_media_candidate(payload: dict) -> tuple[str, str, str, str | None] | None:
+    body = payload.get("body")
+    media_fields = ("image", "document")
+
+    for field in media_fields:
+        media_value = payload.get(field)
+        if not media_value:
+            continue
+
+        if isinstance(media_value, str):
+            filename = Path(media_value).name or f"{field}.bin"
+            mime_type = _guess_mime_type(filename)
+            if mime_type not in SUPPORTED_MIME_TYPES:
+                continue
+            return media_value, mime_type, filename, body
+
+        if isinstance(media_value, dict):
+            media_url = media_value.get("url") or media_value.get("path")
+            if not media_url:
+                continue
+            filename = media_value.get("filename") or Path(media_url).name or f"{field}.bin"
+            mime_type = _guess_mime_type(filename, media_value.get("mime_type"))
+            if mime_type not in SUPPORTED_MIME_TYPES:
+                continue
+            caption = media_value.get("caption") or body
+            return media_url, mime_type, filename, caption
+
+    return None
 
 
 def get_or_create_user(db: Session, whatsapp_id: str) -> User:
@@ -32,57 +116,60 @@ async def create_request_from_upload(
     caption: str | None,
 ) -> int:
     user = get_or_create_user(db, whatsapp_id)
+    wallet = get_or_create_wallet(db, user.id)
+    consume_verification_credit(db, wallet, cost=1, auto_seed_dev=whatsapp_id == "dev-user")
     path, size = await persist_upload(upload_file, prefix="dev_")
-    request = VerificationRequest(
-        user_id=user.id,
-        status="received",
+    request = _create_request_record(
+        db=db,
+        whatsapp_id=whatsapp_id,
         caption=caption,
-        expected_amount=float(expected_amount) if expected_amount else None,
+        expected_amount=expected_amount,
     )
-    db.add(request)
-    db.commit()
-    db.refresh(request)
-    artifact = Artifact(
+    _create_artifact_record(
+        db=db,
         request_id=request.id,
-        source_path=str(path),
+        source_path=path,
         mime_type=upload_file.content_type or "application/octet-stream",
         original_filename=upload_file.filename or path.name,
         file_size=size,
     )
-    db.add(artifact)
-    db.commit()
     return request.id
 
 
 async def create_request_from_gowa_event(db: Session, payload: dict) -> int | None:
-    if payload.get("type") != "media":
+    if payload.get("event") != "message":
         return None
-    whatsapp_id = payload["from"]
-    media_url = payload["media_url"]
-    mime_type = payload.get("mime_type", "application/octet-stream")
-    filename = payload.get("file_name", "artifact.bin")
+    message_payload = payload.get("payload", {})
+    media_candidate = _extract_media_candidate(message_payload)
+    if media_candidate is None:
+        return None
+
+    whatsapp_id = message_payload["from"]
+    media_url, mime_type, filename, caption = media_candidate
+    user = get_or_create_user(db, whatsapp_id)
+    wallet = get_or_create_wallet(db, user.id)
+    consume_verification_credit(db, wallet, cost=1)
     client = GowaClient()
     content = await client.fetch_media_bytes(media_url)
     path, size = persist_bytes(content, filename)
-    user = get_or_create_user(db, whatsapp_id)
-    request = VerificationRequest(user_id=user.id, status="received", caption=payload.get("caption"))
-    db.add(request)
-    db.commit()
-    db.refresh(request)
-    artifact = Artifact(
+    request = _create_request_record(
+        db=db,
+        whatsapp_id=whatsapp_id,
+        caption=caption,
+    )
+    _create_artifact_record(
+        db=db,
         request_id=request.id,
-        source_path=str(path),
+        source_path=path,
         mime_type=mime_type,
         original_filename=filename,
         file_size=size,
     )
-    db.add(artifact)
-    db.commit()
     return request.id
 
 
 def save_pipeline_result(db: Session, request_id: int, result: CanonicalResult, debug: dict) -> None:
-    request = db.query(VerificationRequest).get(request_id)
+    request = db.get(VerificationRequest, request_id)
     artifact = db.query(Artifact).filter(Artifact.request_id == request_id).one()
     artifact.detected_artifact_type = result.artifact_type
     artifact.annotated_path = result.annotated_artifact_path
@@ -108,14 +195,14 @@ def save_pipeline_result(db: Session, request_id: int, result: CanonicalResult, 
 
 
 def mark_failed(db: Session, request_id: int, reason: str) -> None:
-    request = db.query(VerificationRequest).get(request_id)
+    request = db.get(VerificationRequest, request_id)
     request.status = "failed"
     request.failure_reason = reason
     db.commit()
 
 
 def fetch_result_payload(db: Session, request_id: int) -> dict:
-    request = db.query(VerificationRequest).get(request_id)
+    request = db.get(VerificationRequest, request_id)
     artifact = db.query(Artifact).filter(Artifact.request_id == request_id).one_or_none()
     extraction = db.query(Extraction).filter(Extraction.request_id == request_id).one_or_none()
     analysis = db.query(AnalysisResult).filter(AnalysisResult.request_id == request_id).one_or_none()

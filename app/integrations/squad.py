@@ -17,6 +17,7 @@ class SquadClient:
         amount_kobo: int,
         credits_to_add: int,
         user_id: int | None = None,
+        transaction_ref: str | None = None,
     ) -> dict:
         async with httpx.AsyncClient(timeout=30.0) as client:
             response = await client.post(
@@ -24,12 +25,25 @@ class SquadClient:
                 json={
                     "email": customer_email,
                     "amount": amount_kobo,
+                    "currency": "NGN",
+                    "initiate_type": "inline",
+                    "transaction_ref": transaction_ref,
+                    "callback_url": settings.squad_callback_url or None,
                     "metadata": {
                         "purpose": "credit_recharge",
                         "credits_to_add": credits_to_add,
                         "user_id": user_id,
                     },
                 },
+                headers=self.headers,
+            )
+            response.raise_for_status()
+            return response.json()
+
+    async def verify_transaction(self, transaction_ref: str) -> dict:
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            response = await client.get(
+                f"{self.base_url}/transaction/verify/{transaction_ref}",
                 headers=self.headers,
             )
             response.raise_for_status()

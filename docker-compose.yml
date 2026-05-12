@@ -31,6 +31,7 @@ services:
 
   gowa:
     image: ghcr.io/aldinokemal/go-whatsapp-web-multidevice:latest
+    restart: unless-stopped
     env_file:
       - .env
     environment:
@@ -43,7 +44,8 @@ services:
     expose:
       - "3000"
     volumes:
-      - ./gowa-data:/app/storages
+      - gowa_data:/app/storages
 
 volumes:
   postgres_data:
+  gowa_data:

@@ -512,7 +512,8 @@ Compose is set up for internal service networking and Dokploy-style deployment:
 - `gowa` exposes `3000` internally
 - `postgres` exposes `5432` internally
 - no host port mappings are required in the default stack
-- GoWA state is persisted in `./gowa-data`
+- GoWA session state is stored in the persistent Docker volume `gowa_data` mounted at `/app/storages`
+- redeploy the stack without removing volumes so the connected WhatsApp device remains available
 
 ## Test plan
 

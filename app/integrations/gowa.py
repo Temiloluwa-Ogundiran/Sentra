@@ -1,4 +1,5 @@
 from pathlib import Path
+from urllib.parse import urljoin
 
 import httpx
 
@@ -35,7 +36,10 @@ class GowaClient:
             )
 
     async def fetch_media_bytes(self, media_url: str) -> bytes:
+        resolved_url = media_url if media_url.startswith(("http://", "https://")) else urljoin(
+            f"{self.base_url}/", media_url.lstrip("/")
+        )
         async with httpx.AsyncClient(timeout=60.0) as client:
-            response = await client.get(media_url, headers=self.headers, auth=self.auth)
+            response = await client.get(resolved_url, headers=self.headers, auth=self.auth)
             response.raise_for_status()
             return response.content

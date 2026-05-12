@@ -21,6 +21,7 @@ def init_db() -> None:
     from app.models.artifact import Artifact
     from app.models.extraction import Extraction
     from app.models.credit_wallet import CreditWallet
+    from app.models.payment_transaction import PaymentTransaction
     from app.models.user import User
     from app.models.verification_request import VerificationRequest
 

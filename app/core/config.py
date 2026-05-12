@@ -15,6 +15,7 @@ class Settings(BaseSettings):
     squad_base_url: str = "https://sandbox-api-d.squadco.com"
     squad_secret_key: str = ""
     squad_public_key: str = ""
+    squad_callback_url: str = ""
     hosted_artifact_reasoner_url: str = ""
     hosted_tamper_detector_url: str = ""
     hosted_synthetic_artifact_detector_url: str = ""

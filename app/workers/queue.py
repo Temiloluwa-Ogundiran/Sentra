@@ -24,6 +24,7 @@ class WorkerQueue:
     def start(self) -> None:
         if self.thread and self.thread.is_alive():
             return
+        self.stop_event.clear()
         self.thread = Thread(target=self._run, daemon=True)
         self.thread.start()
 
@@ -42,25 +43,32 @@ class WorkerQueue:
             except Empty:
                 continue
 
-            with SessionLocal() as db:
-                request = db.query(VerificationRequest).get(request_id)
-                artifact = db.query(Artifact).filter(Artifact.request_id == request_id).one()
-                user = db.query(User).get(request.user_id)
-                request.status = "processing"
-                db.commit()
-                try:
-                    result, debug = run_pipeline(
-                        request_id=request_id,
-                        file_path=__import__("pathlib").Path(artifact.source_path),
-                        mime_type=artifact.mime_type,
-                        expected_amount=str(request.expected_amount) if request.expected_amount else None,
-                    )
-                    save_pipeline_result(db, request_id, result, debug)
-                    asyncio.run(send_result(user.whatsapp_id if user else "dev-user", result))
-                except Exception as exc:
-                    logger.exception("request failed", extra={"extra_payload": {"request_id": request_id}})
-                    mark_failed(db, request_id, str(exc))
+            self.process_request(request_id)
             self.queue.task_done()
+
+    def process_request(self, request_id: int) -> None:
+        with SessionLocal() as db:
+            request = db.get(VerificationRequest, request_id)
+            if request is None:
+                logger.warning("request missing", extra={"extra_payload": {"request_id": request_id}})
+                return
+
+            artifact = db.query(Artifact).filter(Artifact.request_id == request_id).one()
+            user = db.get(User, request.user_id)
+            request.status = "processing"
+            db.commit()
+            try:
+                result, debug = run_pipeline(
+                    request_id=request_id,
+                    file_path=__import__("pathlib").Path(artifact.source_path),
+                    mime_type=artifact.mime_type,
+                    expected_amount=str(request.expected_amount) if request.expected_amount else None,
+                )
+                save_pipeline_result(db, request_id, result, debug)
+                asyncio.run(send_result(user.whatsapp_id if user else "dev-user", result))
+            except Exception as exc:
+                logger.exception("request failed", extra={"extra_payload": {"request_id": request_id}})
+                mark_failed(db, request_id, str(exc))
 
 
 worker_queue = WorkerQueue()

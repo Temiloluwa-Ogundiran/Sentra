@@ -6,6 +6,18 @@ REVIEW_ACTION = "Do not rely on this proof alone. Ask for a clearer screenshot o
 MATCH_ACTION = "This proof matches known patterns with no major issues detected. Proceed at your discretion."
 
 
+def _dedupe(values: list[str]) -> list[str]:
+    seen: set[str] = set()
+    ordered: list[str] = []
+    for value in values:
+        normalized = value.strip()
+        if not normalized or normalized in seen:
+            continue
+        seen.add(normalized)
+        ordered.append(normalized)
+    return ordered
+
+
 def fuse_result(
     request_id: int,
     artifact_type: str,
@@ -43,7 +55,7 @@ def fuse_result(
         verdict=verdict,
         recommended_action=action,
         extracted_fields=extracted_fields,
-        reasons=reasons[:3],
+        reasons=_dedupe(reasons)[:5],
         quality_flags=quality_flags,
         annotated_artifact_path=annotated_artifact_path,
         processing_time_ms=processing_time_ms,

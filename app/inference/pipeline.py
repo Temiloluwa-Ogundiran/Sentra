@@ -38,6 +38,12 @@ def run_pipeline(request_id: int, file_path: Path, mime_type: str, expected_amou
     if isinstance(tamper_probability, (int, float)) and tamper_probability >= 0.7:
         reasons.append("This proof contains strong signals of manipulation or fraudulent editing.")
         quality_flags.append("tamper_signal")
+    suspicious_signals = reasoner_response.get("suspicious_signals")
+    if isinstance(suspicious_signals, list):
+        reasons.extend(str(signal).strip() for signal in suspicious_signals if str(signal).strip())
+    trust_cues = reasoner_response.get("trust_cues")
+    if isinstance(trust_cues, list):
+        reasons.extend(str(cue).strip() for cue in trust_cues if str(cue).strip())
     reasoner_summary = reasoner_response.get("summary") or reasoner_response.get("raw_text")
     if isinstance(reasoner_summary, str) and reasoner_summary.strip():
         reasons.append(reasoner_summary.strip())
