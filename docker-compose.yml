@@ -45,6 +45,7 @@ services:
       - "3000"
     volumes:
       - gowa_data:/app/storages
+      - ./storage:/app/storage
 
 volumes:
   postgres_data:

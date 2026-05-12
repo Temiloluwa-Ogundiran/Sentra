@@ -12,7 +12,7 @@ from app.inference.hosted_runtime import (
     call_tamper_detector,
 )
 from app.inference.ocr import run_ocr
-from app.inference.quality import assess_quality
+from app.inference.quality import assess_quality, lookup_reference_template_fields
 from app.inference.rules import run_rules
 from app.schemas.common import CanonicalResult
 
@@ -73,9 +73,12 @@ def run_pipeline(
     if stage_callback:
         stage_callback("reading_proof")
     raw_text, extracted_fields = run_ocr(file_path)
+    extracted_fields = _merge_extracted_fields(extracted_fields, lookup_reference_template_fields(file_path))
     if stage_callback:
         stage_callback("reviewing_changes")
-    should_skip_hosted = mime_type == "application/pdf" or "edited_overlay_signal" in quality_flags
+    should_skip_hosted = mime_type == "application/pdf" or any(
+        flag in quality_flags for flag in ("edited_overlay_signal", "reference_clone_signal", "reference_template_match")
+    )
     if should_skip_hosted:
         reasoner_response = {"status": "not_applicable"}
         tamper_response = {"status": "not_applicable"}

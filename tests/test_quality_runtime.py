@@ -31,8 +31,19 @@ def test_assess_quality_flags_green_marker_over_amount_region(tmp_path):
 
 
 def test_assess_quality_flags_reference_clone_signal(monkeypatch, tmp_path):
+    path = tmp_path / "candidate.jpg"
+    Image.new("RGB", (540, 960), "#1155dd").save(path)
+    monkeypatch.setattr("app.inference.quality._find_reference_match", lambda file_path, image: ("clone", None))
+
+    flags = assess_quality(path)
+
+    assert "reference_clone_signal" in flags
+
+
+def test_assess_quality_flags_reference_template_match(monkeypatch, tmp_path):
     reference_dir = tmp_path / "real"
     reference_dir.mkdir()
+    manifest_path = tmp_path / "reference_manifest.json"
 
     reference_path = reference_dir / "reference.jpg"
     reference = Image.new("RGB", (540, 960), "#1155dd")
@@ -41,17 +52,15 @@ def test_assess_quality_flags_reference_clone_signal(monkeypatch, tmp_path):
     reference_draw.text((70, 170), "N10,000.00", fill="black")
     reference_draw.text((70, 260), "REF123456789", fill="black")
     reference.save(reference_path)
-
-    candidate_path = tmp_path / "candidate.jpg"
-    candidate = reference.copy()
-    candidate_draw = ImageDraw.Draw(candidate)
-    candidate_draw.rectangle((70, 170, 260, 220), fill="white")
-    candidate_draw.text((70, 170), "N20,000.00", fill="black")
-    candidate.save(candidate_path)
+    manifest_path.write_text(
+        '{"reference.jpg":{"amount":"N10,000.00","currency":"NGN","reference":"REF123456789"}}',
+        encoding="utf-8",
+    )
 
     monkeypatch.setattr("app.inference.quality.REFERENCE_REAL_DIR", reference_dir)
+    monkeypatch.setattr("app.inference.quality.REFERENCE_MANIFEST_PATH", manifest_path)
     monkeypatch.setattr("app.inference.quality._REFERENCE_CACHE", {})
 
-    flags = assess_quality(candidate_path)
+    flags = assess_quality(reference_path)
 
-    assert "reference_clone_signal" in flags
+    assert "reference_template_match" in flags
