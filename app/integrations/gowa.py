@@ -30,7 +30,7 @@ class GowaClient:
     async def send_file(self, to: str, file_path: Path, caption: str | None = None) -> None:
         async with httpx.AsyncClient(timeout=30.0) as client:
             response = await client.post(
-                f"{self.base_url}/api/send/file",
+                f"{self.base_url}/send/file",
                 json={"phone": to, "filePath": str(file_path), "caption": caption or ""},
                 headers=self.headers,
                 auth=self.auth,

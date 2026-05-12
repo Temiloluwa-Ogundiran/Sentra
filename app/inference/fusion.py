@@ -33,7 +33,10 @@ def fuse_result(
     )
     has_missing_reasons = any("missing" in reason.lower() or "not detected" in reason.lower() for reason in reasons)
 
-    if "unreadable_artifact" in quality_flags or "low_resolution" in quality_flags:
+    if "edited_overlay_signal" in quality_flags:
+        verdict = "Suspicious"
+        action = SUSPICIOUS_ACTION
+    elif "unreadable_artifact" in quality_flags or "low_resolution" in quality_flags:
         verdict = "Review"
         action = REVIEW_ACTION
     elif strong_signal_count >= 2:

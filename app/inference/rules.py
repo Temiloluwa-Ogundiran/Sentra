@@ -15,6 +15,9 @@ def run_rules(
         reasons.append("The upload quality is too low for a confident check.")
 
     upper_text = raw_text.upper()
+    if "EDITED" in upper_text or "ALTERED" in upper_text:
+        rule_hits.append("common.edited_marker_detected")
+        reasons.append("Visible edited markers or altered labels were detected on this proof.")
     if artifact_type == "sms_alert_screenshot" and "BALANCE" not in upper_text:
         rule_hits.append("sms.missing_balance")
         reasons.append("The SMS proof is missing a balance-style structural cue.")

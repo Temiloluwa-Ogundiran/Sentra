@@ -1,5 +1,6 @@
 from pathlib import Path
 from time import perf_counter
+from concurrent.futures import ThreadPoolExecutor
 
 from app.core.logging import get_logger
 from app.inference.annotate import annotate_artifact
@@ -16,6 +17,7 @@ from app.inference.rules import run_rules
 from app.schemas.common import CanonicalResult
 
 logger = get_logger(__name__)
+HOSTED_EXECUTOR = ThreadPoolExecutor(max_workers=3)
 
 
 def _safe_model_call(label: str, fn, *args):
@@ -50,6 +52,12 @@ def _merge_extracted_fields(primary, fallback: dict | None):
     return type(primary)(**data)
 
 
+def _has_structured_fields(extracted_fields) -> bool:
+    values = extracted_fields.model_dump()
+    present = sum(1 for value in values.values() if _normalize_field_value(value) is not None)
+    return present >= 4 and _normalize_field_value(values.get("reference")) is not None
+
+
 def run_pipeline(
     request_id: int,
     file_path: Path,
@@ -67,12 +75,29 @@ def run_pipeline(
     raw_text, extracted_fields = run_ocr(file_path)
     if stage_callback:
         stage_callback("reviewing_changes")
-    reasoner_response = _safe_model_call("artifact_reasoner", call_artifact_reasoner, file_path, artifact_type)
-    tamper_response = _safe_model_call("tamper_detector", call_tamper_detector, file_path)
-    synthetic_response = _safe_model_call(
-        "synthetic_artifact_detector", call_synthetic_artifact_detector, file_path, artifact_type
-    )
+    if mime_type == "application/pdf":
+        reasoner_response = {"status": "not_applicable"}
+        tamper_response = {"status": "not_applicable"}
+        synthetic_response = {"status": "not_applicable"}
+    else:
+        reasoner_future = HOSTED_EXECUTOR.submit(
+            _safe_model_call, "artifact_reasoner", call_artifact_reasoner, file_path, artifact_type
+        )
+        tamper_future = HOSTED_EXECUTOR.submit(_safe_model_call, "tamper_detector", call_tamper_detector, file_path)
+        synthetic_future = HOSTED_EXECUTOR.submit(
+            _safe_model_call, "synthetic_artifact_detector", call_synthetic_artifact_detector, file_path, artifact_type
+        )
+        reasoner_response = reasoner_future.result()
+        tamper_response = tamper_future.result()
+        synthetic_response = synthetic_future.result()
     extracted_fields = _merge_extracted_fields(extracted_fields, reasoner_response.get("extracted_fields"))
+    suspicious_signals = reasoner_response.get("suspicious_signals")
+    has_reasoner_suspicion = False
+    if isinstance(suspicious_signals, list):
+        normalized_signals = [str(signal).strip() for signal in suspicious_signals if str(signal).strip()]
+        if normalized_signals:
+            has_reasoner_suspicion = True
+    has_confident_fields = _has_structured_fields(extracted_fields)
     if stage_callback:
         stage_callback("checking_details")
     rule_hits, reasons = run_rules(artifact_type, raw_text, extracted_fields, quality_flags)
@@ -89,19 +114,29 @@ def run_pipeline(
     if synthetic_response.get("status") == "error":
         reasons.append("Synthetic-artifact detection is temporarily unavailable, so this result uses fallback checks.")
     synthetic_probability = synthetic_response.get("synthetic_probability")
-    if isinstance(synthetic_probability, (int, float)) and synthetic_probability >= 0.85:
+    if (
+        isinstance(synthetic_probability, (int, float))
+        and synthetic_probability >= 0.85
+        and (has_reasoner_suspicion or not has_confident_fields)
+    ):
         reasons.append("One of our image checks suggests this proof may not be an original banking artifact.")
         quality_flags.append("synthetic_artifact_signal")
     tamper_probability = tamper_response.get("tamper_probability")
-    if isinstance(tamper_probability, (int, float)) and tamper_probability >= 0.85:
+    if (
+        isinstance(tamper_probability, (int, float))
+        and tamper_probability >= 0.85
+        and (has_reasoner_suspicion or not has_confident_fields)
+    ):
         reasons.append("One image-integrity check raised a caution flag on this proof.")
         quality_flags.append("tamper_signal")
-    suspicious_signals = reasoner_response.get("suspicious_signals")
     if isinstance(suspicious_signals, list):
         normalized_signals = [str(signal).strip() for signal in suspicious_signals if str(signal).strip()]
         if normalized_signals:
             reasons.extend(normalized_signals)
             quality_flags.append("reasoner_suspicious_signal")
+    trust_cues = reasoner_response.get("trust_cues")
+    if isinstance(trust_cues, list) and not reasons:
+        reasons.extend(str(cue).strip() for cue in trust_cues[:2] if str(cue).strip())
     if stage_callback:
         stage_callback("finalizing")
     annotated = annotate_artifact(file_path, artifact_type, reasons, request_id)
