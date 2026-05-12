@@ -288,3 +288,72 @@ def test_run_pipeline_marks_green_marker_amount_tamper_as_suspicious(monkeypatch
 
     assert result.verdict in {"Review", "Suspicious"}
     assert "edited_overlay_signal" in result.quality_flags
+
+
+def test_run_pipeline_marks_reference_clone_as_suspicious(monkeypatch, tmp_path):
+    reference_dir = tmp_path / "real"
+    reference_dir.mkdir()
+
+    reference_path = reference_dir / "reference.jpg"
+    reference = Image.new("RGB", (540, 960), "#1155dd")
+    reference_draw = ImageDraw.Draw(reference)
+    reference_draw.rounded_rectangle((40, 120, 500, 760), radius=24, fill="white")
+    reference_draw.text((70, 170), "N10,000.00", fill="black")
+    reference_draw.text((70, 260), "REF123456789", fill="black")
+    reference.save(reference_path)
+
+    candidate_path = tmp_path / "candidate.jpg"
+    candidate = reference.copy()
+    candidate_draw = ImageDraw.Draw(candidate)
+    candidate_draw.rectangle((70, 170, 260, 220), fill="white")
+    candidate_draw.text((70, 170), "N20,000.00", fill="black")
+    candidate.save(candidate_path)
+
+    monkeypatch.setattr("app.inference.quality.REFERENCE_REAL_DIR", reference_dir)
+    monkeypatch.setattr("app.inference.quality._REFERENCE_CACHE", {})
+    monkeypatch.setattr("app.inference.pipeline.classify_artifact", lambda file_path, mime_type: "bank_alert_screenshot")
+    monkeypatch.setattr(
+        "app.inference.pipeline.run_ocr",
+        lambda file_path: (
+            "",
+            __import__("app.schemas.common", fromlist=["ExtractedFields"]).ExtractedFields(
+                amount="N20,000.00",
+                currency="NGN",
+                reference="REF123456789",
+            ),
+        ),
+    )
+    monkeypatch.setattr(
+        "app.inference.pipeline.run_rules",
+        lambda artifact_type, raw_text, extracted_fields, quality_flags: (
+            [],
+            ["Near-identical layout match to a known payment document sample."]
+            if "reference_clone_signal" in quality_flags
+            else [],
+        ),
+    )
+    monkeypatch.setattr(
+        "app.inference.pipeline.call_artifact_reasoner",
+        lambda file_path, artifact_type: {"artifact_type_guess": "bank_alert_screenshot", "suspicious_signals": []},
+    )
+    monkeypatch.setattr(
+        "app.inference.pipeline.call_tamper_detector",
+        lambda file_path: {"tamper_probability": 0.05, "predictions": [{"label": "non_fraudulent", "score": 0.95}]},
+    )
+    monkeypatch.setattr(
+        "app.inference.pipeline.call_synthetic_artifact_detector",
+        lambda file_path, artifact_type: {"synthetic_probability": 0.05, "predictions": [{"label": "by human", "score": 0.95}]},
+    )
+    monkeypatch.setattr(
+        "app.inference.pipeline.annotate_artifact",
+        lambda file_path, artifact_type, reasons, request_id: tmp_path / "annotated.png",
+    )
+
+    result, _ = run_pipeline(
+        request_id=94,
+        file_path=candidate_path,
+        mime_type="image/jpeg",
+    )
+
+    assert result.verdict in {"Review", "Suspicious"}
+    assert "reference_clone_signal" in result.quality_flags

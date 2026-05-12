@@ -16,6 +16,9 @@ def run_rules(
     if "edited_overlay_signal" in quality_flags:
         rule_hits.append("quality.edited_overlay")
         reasons.append("A visible marker, paint-over, or edited overlay was detected on this payment document.")
+    if "reference_clone_signal" in quality_flags:
+        rule_hits.append("quality.reference_clone")
+        reasons.append("This payment document is nearly identical to a known sample layout, which can indicate cloning or AI regeneration.")
 
     upper_text = raw_text.upper()
     if "EDITED" in upper_text or "ALTERED" in upper_text:

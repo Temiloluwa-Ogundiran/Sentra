@@ -28,3 +28,30 @@ def test_assess_quality_flags_green_marker_over_amount_region(tmp_path):
     flags = assess_quality(path)
 
     assert "edited_overlay_signal" in flags
+
+
+def test_assess_quality_flags_reference_clone_signal(monkeypatch, tmp_path):
+    reference_dir = tmp_path / "real"
+    reference_dir.mkdir()
+
+    reference_path = reference_dir / "reference.jpg"
+    reference = Image.new("RGB", (540, 960), "#1155dd")
+    reference_draw = ImageDraw.Draw(reference)
+    reference_draw.rounded_rectangle((40, 120, 500, 760), radius=24, fill="white")
+    reference_draw.text((70, 170), "N10,000.00", fill="black")
+    reference_draw.text((70, 260), "REF123456789", fill="black")
+    reference.save(reference_path)
+
+    candidate_path = tmp_path / "candidate.jpg"
+    candidate = reference.copy()
+    candidate_draw = ImageDraw.Draw(candidate)
+    candidate_draw.rectangle((70, 170, 260, 220), fill="white")
+    candidate_draw.text((70, 170), "N20,000.00", fill="black")
+    candidate.save(candidate_path)
+
+    monkeypatch.setattr("app.inference.quality.REFERENCE_REAL_DIR", reference_dir)
+    monkeypatch.setattr("app.inference.quality._REFERENCE_CACHE", {})
+
+    flags = assess_quality(candidate_path)
+
+    assert "reference_clone_signal" in flags

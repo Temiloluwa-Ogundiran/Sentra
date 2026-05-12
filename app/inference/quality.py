@@ -4,6 +4,72 @@ import fitz
 import numpy as np
 from PIL import Image
 
+REFERENCE_REAL_DIR = Path("artifacts/real")
+_REFERENCE_CACHE: dict[str, list[dict[str, object]]] = {}
+
+
+def _difference_hash(image: Image.Image, size: int = 8) -> tuple[int, ...]:
+    grayscale = image.convert("L").resize((size + 1, size))
+    pixels = list(grayscale.getdata())
+    bits: list[int] = []
+    for row_index in range(size):
+        row = pixels[row_index * (size + 1) : (row_index + 1) * (size + 1)]
+        for column_index in range(size):
+            bits.append(1 if row[column_index] > row[column_index + 1] else 0)
+    return tuple(bits)
+
+
+def _hamming_distance(left: tuple[int, ...], right: tuple[int, ...]) -> int:
+    return sum(int(a != b) for a, b in zip(left, right))
+
+
+def _sha256_bytes(file_path: Path) -> str:
+    import hashlib
+
+    return hashlib.sha256(file_path.read_bytes()).hexdigest()
+
+
+def _load_reference_library(reference_dir: Path) -> list[dict[str, object]]:
+    cache_key = str(reference_dir.resolve())
+    if cache_key in _REFERENCE_CACHE:
+        return _REFERENCE_CACHE[cache_key]
+
+    references: list[dict[str, object]] = []
+    if reference_dir.exists():
+        for path in sorted(reference_dir.iterdir()):
+            if not path.is_file() or path.suffix.lower() not in {".jpg", ".jpeg", ".png"}:
+                continue
+            with Image.open(path) as image:
+                references.append(
+                    {
+                        "path": path.resolve(),
+                        "hash": _difference_hash(image),
+                        "sha256": _sha256_bytes(path),
+                    }
+                )
+
+    _REFERENCE_CACHE[cache_key] = references
+    return references
+
+
+def _looks_like_reference_clone(file_path: Path, image: Image.Image) -> bool:
+    if file_path.suffix.lower() not in {".jpg", ".jpeg", ".png"}:
+        return False
+
+    candidate_hash = _difference_hash(image)
+    candidate_sha = _sha256_bytes(file_path)
+    candidate_resolved = file_path.resolve()
+
+    for reference in _load_reference_library(REFERENCE_REAL_DIR):
+        reference_path = reference["path"]
+        if reference_path == candidate_resolved:
+            continue
+        if reference["sha256"] == candidate_sha:
+            continue
+        if _hamming_distance(candidate_hash, reference["hash"]) <= 2:
+            return True
+    return False
+
 
 def _has_marker_overlay(rgb: np.ndarray) -> bool:
     height, width = rgb.shape[:2]
@@ -76,12 +142,15 @@ def assess_quality(file_path: Path) -> list[str]:
         else:
             with Image.open(file_path) as image:
                 width, height = image.size
-                rgb = np.array(image.convert("RGB"))
+                rgb_image = image.convert("RGB")
+                rgb = np.array(rgb_image)
                 red_mask = (rgb[:, :, 0] > 180) & (rgb[:, :, 1] < 110) & (rgb[:, :, 2] < 110)
                 if red_mask.mean() > 0.01:
                     flags.append("edited_overlay_signal")
                 elif _has_marker_overlay(rgb):
                     flags.append("edited_overlay_signal")
+                elif _looks_like_reference_clone(file_path, rgb_image):
+                    flags.append("reference_clone_signal")
         if width < 400 or height < 400:
             flags.append("low_resolution")
     except Exception:
