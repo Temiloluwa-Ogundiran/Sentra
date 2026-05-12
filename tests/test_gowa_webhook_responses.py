@@ -10,7 +10,10 @@ def test_gowa_webhook_replies_to_text_only_message(monkeypatch):
 
     class Decision:
         action = "reply_help"
-        reply_text = "Hi — Sentra checks one payment proof screenshot or PDF at a time. Send a JPG, PNG, or PDF proof."
+        reply_text = (
+            "Hi — Sentra checks one payment document screenshot or PDF at a time. "
+            "Send a JPG, PNG, or PDF payment document."
+        )
         start_verification = False
 
     async def fake_decide_inbound_action(db, payload):
@@ -43,7 +46,7 @@ def test_gowa_webhook_replies_to_text_only_message(monkeypatch):
     assert sent_messages == [
         (
             "2349025283155@s.whatsapp.net",
-            "Hi — Sentra checks one payment proof screenshot or PDF at a time. Send a JPG, PNG, or PDF proof.",
+            "Hi — Sentra checks one payment document screenshot or PDF at a time. Send a JPG, PNG, or PDF payment document.",
         )
     ]
 
@@ -55,7 +58,10 @@ def test_gowa_webhook_replies_when_credits_are_exhausted(monkeypatch):
 
     class Decision:
         action = "reply_recharge_required"
-        reply_text = "Your Sentra verification credits are exhausted. Recharge your credits before submitting another proof."
+        reply_text = (
+            "Your Sentra verification credits are exhausted. "
+            "Recharge your credits before submitting another payment document."
+        )
         start_verification = True
 
     async def fake_decide_inbound_action(db, payload):
@@ -83,7 +89,7 @@ def test_gowa_webhook_replies_when_credits_are_exhausted(monkeypatch):
             "event": "message",
             "payload": {
                 "from": "2349025283155@s.whatsapp.net",
-                "body": "check this proof",
+                "body": "check this payment document",
             },
         },
     )
@@ -94,7 +100,7 @@ def test_gowa_webhook_replies_when_credits_are_exhausted(monkeypatch):
     assert sent_messages == [
         (
             "2349025283155@s.whatsapp.net",
-            "Your Sentra verification credits are exhausted. Recharge your credits before submitting another proof.",
+            "Your Sentra verification credits are exhausted. Recharge your credits before submitting another payment document.",
         )
     ]
 
@@ -107,7 +113,7 @@ def test_gowa_webhook_starts_verification_with_typing_and_ack(monkeypatch):
 
     class Decision:
         action = "start_verification"
-        reply_text = "We are checking your proof now."
+        reply_text = "We are checking your payment document now."
         start_verification = True
 
     async def fake_decide_inbound_action(db, payload):
@@ -146,5 +152,5 @@ def test_gowa_webhook_starts_verification_with_typing_and_ack(monkeypatch):
     assert response.status_code == 200
     assert response.json()["request_id"] == 91
     assert sent_typing == ["2349025283155@s.whatsapp.net"]
-    assert sent_messages == [("2349025283155@s.whatsapp.net", "We are checking your proof now.")]
+    assert sent_messages == [("2349025283155@s.whatsapp.net", "We are checking your payment document now.")]
     assert enqueued == [91]

@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from PIL import Image
+from PIL import Image, ImageDraw
 
 from app.inference.pipeline import run_pipeline
 
@@ -64,7 +64,7 @@ def test_run_pipeline_combines_hosted_signals(monkeypatch, tmp_path):
     assert result.annotated_artifact_path == str(tmp_path / "annotated.png")
     assert "Amount region edited" in result.reasons
     assert "Provider layout looks coherent" not in result.reasons
-    assert "One image-integrity check raised a caution flag on this proof." in result.reasons
+    assert "One image-integrity check raised a caution flag on this payment document." in result.reasons
     assert debug["model_scores"]["artifact_reasoner"]["summary"] == "Likely edited amount field."
 
 
@@ -235,3 +235,56 @@ def test_run_pipeline_skips_hosted_calls_for_pdf(monkeypatch, tmp_path):
 
     assert result.verdict == "High-confidence pattern match"
     assert debug["model_scores"]["artifact_reasoner"]["status"] == "not_applicable"
+
+
+def test_run_pipeline_marks_green_marker_amount_tamper_as_suspicious(monkeypatch, tmp_path):
+    sample = tmp_path / "tampered.png"
+    image = Image.new("RGB", (720, 1280), "white")
+    draw = ImageDraw.Draw(image)
+    draw.rounded_rectangle((80, 180, 640, 1040), radius=24, fill=(250, 250, 250))
+    draw.text((120, 260), "N10,000.00", fill=(20, 20, 20))
+    draw.line((280, 250, 330, 360), fill=(40, 255, 160), width=26)
+    draw.line((330, 250, 280, 360), fill=(40, 255, 160), width=26)
+    image.save(sample)
+
+    monkeypatch.setattr("app.inference.pipeline.classify_artifact", lambda file_path, mime_type: "bank_alert_screenshot")
+    monkeypatch.setattr(
+        "app.inference.pipeline.run_ocr",
+        lambda file_path: (
+            "Amount N10,000.00\nRef TX123456789",
+            __import__("app.schemas.common", fromlist=["ExtractedFields"]).ExtractedFields(
+                amount="N10,000.00",
+                currency="NGN",
+                reference="TX123456789",
+            ),
+        ),
+    )
+    monkeypatch.setattr(
+        "app.inference.pipeline.run_rules",
+        lambda artifact_type, raw_text, extracted_fields, quality_flags: ([], []),
+    )
+    monkeypatch.setattr(
+        "app.inference.pipeline.call_artifact_reasoner",
+        lambda file_path, artifact_type: {"artifact_type_guess": "bank_alert_screenshot", "suspicious_signals": []},
+    )
+    monkeypatch.setattr(
+        "app.inference.pipeline.call_tamper_detector",
+        lambda file_path: {"tamper_probability": 0.05, "predictions": [{"label": "non_fraudulent", "score": 0.95}]},
+    )
+    monkeypatch.setattr(
+        "app.inference.pipeline.call_synthetic_artifact_detector",
+        lambda file_path, artifact_type: {"synthetic_probability": 0.05, "predictions": [{"label": "by human", "score": 0.95}]},
+    )
+    monkeypatch.setattr(
+        "app.inference.pipeline.annotate_artifact",
+        lambda file_path, artifact_type, reasons, request_id: tmp_path / "annotated.png",
+    )
+
+    result, _ = run_pipeline(
+        request_id=93,
+        file_path=sample,
+        mime_type="image/png",
+    )
+
+    assert result.verdict in {"Review", "Suspicious"}
+    assert "edited_overlay_signal" in result.quality_flags

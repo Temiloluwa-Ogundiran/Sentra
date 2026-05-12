@@ -75,7 +75,8 @@ def run_pipeline(
     raw_text, extracted_fields = run_ocr(file_path)
     if stage_callback:
         stage_callback("reviewing_changes")
-    if mime_type == "application/pdf":
+    should_skip_hosted = mime_type == "application/pdf" or "edited_overlay_signal" in quality_flags
+    if should_skip_hosted:
         reasoner_response = {"status": "not_applicable"}
         tamper_response = {"status": "not_applicable"}
         synthetic_response = {"status": "not_applicable"}
@@ -119,7 +120,7 @@ def run_pipeline(
         and synthetic_probability >= 0.85
         and (has_reasoner_suspicion or not has_confident_fields)
     ):
-        reasons.append("One of our image checks suggests this proof may not be an original banking artifact.")
+        reasons.append("One of our image checks suggests this payment document may not be an original banking artifact.")
         quality_flags.append("synthetic_artifact_signal")
     tamper_probability = tamper_response.get("tamper_probability")
     if (
@@ -127,7 +128,7 @@ def run_pipeline(
         and tamper_probability >= 0.85
         and (has_reasoner_suspicion or not has_confident_fields)
     ):
-        reasons.append("One image-integrity check raised a caution flag on this proof.")
+        reasons.append("One image-integrity check raised a caution flag on this payment document.")
         quality_flags.append("tamper_signal")
     if isinstance(suspicious_signals, list):
         normalized_signals = [str(signal).strip() for signal in suspicious_signals if str(signal).strip()]

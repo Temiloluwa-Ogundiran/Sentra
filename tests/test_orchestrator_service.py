@@ -31,7 +31,7 @@ async def test_decide_inbound_action_replies_with_help_for_greeting():
 
     assert decision.action == "reply_help"
     assert decision.start_verification is False
-    assert "Send one payment proof" in (decision.reply_text or "")
+    assert "payment document" in (decision.reply_text or "").lower()
 
 
 async def test_decide_inbound_action_blocks_media_when_wallet_is_empty():
@@ -63,6 +63,7 @@ async def test_decide_inbound_action_blocks_media_when_wallet_is_empty():
     assert decision.action == "reply_recharge_required"
     assert decision.start_verification is False
     assert "recharge" in (decision.reply_text or "").lower()
+    assert "payment document" in (decision.reply_text or "").lower()
 
 
 async def test_decide_inbound_action_initiates_recharge_from_email_message(monkeypatch):
@@ -203,7 +204,34 @@ async def test_decide_inbound_action_starts_verification_when_wallet_has_credit(
 
     assert decision.action == "start_verification"
     assert decision.start_verification is True
-    assert "checking your proof" in (decision.reply_text or "").lower()
+    assert "checking your payment document" in (decision.reply_text or "").lower()
+
+
+async def test_decide_inbound_action_reports_credit_balance():
+    session_local = _make_session()
+
+    with session_local() as db:
+        user = User(whatsapp_id="2349025283155@s.whatsapp.net")
+        db.add(user)
+        db.commit()
+        db.refresh(user)
+        db.add(CreditWallet(user_id=user.id, balance=15))
+        db.commit()
+
+        decision = await decide_inbound_action(
+            db,
+            payload={
+                "event": "message",
+                "payload": {
+                    "from": "2349025283155@s.whatsapp.net",
+                    "body": "how much credit do i have?",
+                },
+            },
+        )
+
+    assert decision.action == "reply_balance"
+    assert "$" not in (decision.reply_text or "")
+    assert "15 credits" in (decision.reply_text or "").lower()
 
 
 async def test_decide_inbound_action_reports_pending_payment():

@@ -7,12 +7,12 @@ from app.schemas.common import CanonicalResult
 logger = get_logger(__name__)
 
 PROCESSING_STAGE_TEXT = {
-    "preparing": "We are preparing your proof for checking.",
-    "reading_proof": "We are reading the proof now.",
+    "preparing": "We are preparing your payment document for checking.",
+    "reading_proof": "We are reading the payment document now.",
     "checking_details": "We are checking the payment details.",
-    "reviewing_changes": "We are reviewing the proof for unusual changes.",
+    "reviewing_changes": "We are reviewing the payment document for unusual changes.",
     "finalizing": "We are finishing your result.",
-    "failed": "We hit a delay while checking your proof. We will send the final status shortly.",
+    "failed": "We hit a delay while checking your payment document. We will send the final status shortly.",
 }
 
 
@@ -20,19 +20,24 @@ def render_whatsapp_message(result: CanonicalResult) -> str:
     fields = result.extracted_fields
     return "\n".join(
         [
-            f"Verdict: {result.verdict}",
-            f"Artifact type: {result.artifact_type}",
-            "Extracted fields:",
-            f"- Amount: {fields.amount or 'Not detected'}",
-            f"- Currency: {fields.currency or 'Not detected'}",
-            f"- Date: {fields.date or 'Not detected'}",
-            f"- Time: {fields.time or 'Not detected'}",
-            f"- Reference: {fields.reference or 'Not detected'}",
-            f"- Provider: {fields.provider or 'Not detected'}",
-            f"- Recipient label: {fields.recipient_label or 'Not detected'}",
-            "Why:",
-            *[f"- {reason}" for reason in result.reasons],
-            f"Recommended action: {result.recommended_action}",
+            "🧾 Sentra check result",
+            "",
+            f"• Verdict: {result.verdict}",
+            f"• Payment document type: {result.artifact_type}",
+            "",
+            "Detected details",
+            f"• Amount: {fields.amount or 'Not detected'}",
+            f"• Currency: {fields.currency or 'Not detected'}",
+            f"• Date: {fields.date or 'Not detected'}",
+            f"• Time: {fields.time or 'Not detected'}",
+            f"• Reference: {fields.reference or 'Not detected'}",
+            f"• Provider: {fields.provider or 'Not detected'}",
+            f"• Recipient: {fields.recipient_label or 'Not detected'}",
+            "",
+            "Why we said this",
+            *[f"• {reason}" for reason in result.reasons],
+            "",
+            f"Next step: {result.recommended_action}",
         ]
     )
 

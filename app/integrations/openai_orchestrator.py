@@ -49,6 +49,8 @@ async def choose_orchestrator_action(context: dict, allowed_actions: list[str]) 
                             "text": (
                                 "You route WhatsApp verification assistant messages. "
                                 "Choose exactly one action from the allowed list and provide a short, warm, plain-English reply. "
+                                "Always talk about credits, never dollars or wallet currency. "
+                                "Refer to uploads as payment documents, not proofs. "
                                 "Never claim payment settlement was verified."
                             ),
                         }

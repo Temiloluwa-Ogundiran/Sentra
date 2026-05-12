@@ -190,7 +190,7 @@ async def process_squad_webhook(
         if user is not None:
             await send_payment_success_message(
                 user.whatsapp_id,
-                "Payment successful. Your Sentra credits have been added and you can now upload a proof for analysis.",
+                "Payment successful. Your Sentra credits have been added and you can now upload a payment document for analysis.",
             )
         return 200, {"status": "applied", "transaction_ref": transaction.transaction_ref}
 

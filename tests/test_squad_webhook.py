@@ -88,6 +88,6 @@ async def test_process_squad_webhook_applies_credits_once(monkeypatch):
     assert notifications == [
         (
             "2348012345678",
-            "Payment successful. Your Sentra credits have been added and you can now upload a proof for analysis.",
+            "Payment successful. Your Sentra credits have been added and you can now upload a payment document for analysis.",
         )
     ]

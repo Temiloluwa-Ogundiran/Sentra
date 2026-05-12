@@ -1,9 +1,9 @@
 from app.schemas.common import CanonicalResult, ExtractedFields
 
 
-SUSPICIOUS_ACTION = "Do not release goods yet. Request another proof or confirm payment through a safer channel."
-REVIEW_ACTION = "Do not rely on this proof alone. Ask for a clearer screenshot or original receipt document."
-MATCH_ACTION = "This proof matches known patterns with no major issues detected. Proceed at your discretion."
+SUSPICIOUS_ACTION = "Do not release goods yet. Request another payment document or confirm payment through a safer channel."
+REVIEW_ACTION = "Do not rely on this payment document alone. Ask for a clearer screenshot or original receipt document."
+MATCH_ACTION = "This payment document matches known patterns with no major issues detected. Proceed at your discretion."
 
 
 def _dedupe(values: list[str]) -> list[str]:
@@ -51,11 +51,11 @@ def fuse_result(
 
     if not reasons:
         if verdict == "High-confidence pattern match":
-            reasons = ["No major anomaly or tamper signals were detected in this proof format."]
+            reasons = ["No major anomaly or tamper signals were detected in this payment document format."]
         elif verdict == "Review":
             reasons = ["The system could not confidently assess this upload."]
         else:
-            reasons = ["The system found unusual structure or missing proof signals."]
+            reasons = ["The system found unusual structure or missing payment-document signals."]
 
     return CanonicalResult(
         request_id=request_id,

@@ -13,4 +13,4 @@ def test_single_tamper_signal_only_reviews_not_suspicious():
     )
 
     assert result.verdict == "Review"
-    assert "Do not rely on this proof alone" in result.recommended_action
+    assert "Do not rely on this payment document alone" in result.recommended_action

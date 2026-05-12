@@ -16,6 +16,15 @@ logger = get_logger(__name__)
 
 HELP_KEYWORDS = {"hi", "hello", "help", "hey", "what do you do", "how does this work", "start"}
 RECHARGE_KEYWORDS = {"recharge", "credit", "credits", "pay", "payment", "top up", "topup", "fund"}
+BALANCE_KEYWORDS = {
+    "how much credit",
+    "how many credits",
+    "credit balance",
+    "wallet balance",
+    "how much balance",
+    "my balance",
+    "my credits",
+}
 EMAIL_PATTERN = re.compile(r"\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b", re.IGNORECASE)
 
 
@@ -46,6 +55,11 @@ def _is_recharge_message(text: str) -> bool:
     return any(keyword in lowered for keyword in RECHARGE_KEYWORDS)
 
 
+def _is_balance_message(text: str) -> bool:
+    lowered = text.lower().strip()
+    return any(keyword in lowered for keyword in BALANCE_KEYWORDS)
+
+
 def _find_pending_payment(db: Session, user_id: int) -> PaymentTransaction | None:
     return (
         db.query(PaymentTransaction)
@@ -68,36 +82,46 @@ def _find_active_request(db: Session, user_id: int) -> VerificationRequest | Non
     )
 
 
-def _default_reply(action: str, *, has_supported_media: bool, pending_payment: PaymentTransaction | None) -> str | None:
+def _default_reply(
+    action: str,
+    *,
+    has_supported_media: bool,
+    pending_payment: PaymentTransaction | None,
+    wallet_balance: int,
+) -> str | None:
     if action == "reply_help":
         return (
-            "Hi — Sentra checks one payment proof screenshot or PDF at a time. "
-            "Send one payment proof as a JPG, PNG, or PDF file. Verification uses credits, and if you have none left, "
+            "Hi — Sentra checks one payment document screenshot or PDF at a time. "
+            "Send one payment document as a JPG, PNG, or PDF file. Verification uses credits, and if you have none left, "
             "reply with your email address to get a recharge link."
         )
+    if action == "reply_balance":
+        if wallet_balance == 1:
+            return "You currently have 1 credit available."
+        return f"You currently have {wallet_balance} credits available."
     if action == "reply_waiting_for_proof":
-        return "Send one payment proof screenshot or PDF in JPG, PNG, or PDF format and we will check it for you."
+        return "Send one payment document screenshot or PDF in JPG, PNG, or PDF format and we will check it for you."
     if action == "reply_recharge_required":
         base = (
             "you do not have any Sentra credits right now. Reply with your email address to get a recharge link for "
             f"{settings.recharge_credits_to_add} credits."
         )
-        return f"We received your proof, but {base}" if has_supported_media else base.capitalize()
+        return f"We received your payment document, but {base}" if has_supported_media else base.capitalize()
     if action == "reply_payment_pending":
         if pending_payment and pending_payment.checkout_url:
             return (
-                "Your recharge is still pending. Complete the payment with this link, then send your proof after it "
+                "Your recharge is still pending. Complete the payment with this link, then send your payment document after it "
                 f"succeeds: {pending_payment.checkout_url}"
             )
-        return "Your recharge is still pending. Complete the payment first, then send your proof again."
+        return "Your recharge is still pending. Complete the payment first, then send your payment document again."
     if action == "reply_recharge_checkout":
-        return "Your recharge link is ready. Complete payment from the link we just sent, then upload your proof."
+        return "Your recharge link is ready. Complete payment from the link we just sent, then upload your payment document."
     if action == "start_verification":
-        return "We are checking your proof now. I will keep you updated while it runs."
+        return "We are checking your payment document now. I will keep you updated while it runs."
     if action == "reply_processing_in_progress":
-        return "We are already working on your last proof. I will send your result as soon as it is ready."
+        return "We are already working on your last payment document. I will send your result as soon as it is ready."
     if action == "reply_unsupported_input":
-        return "Please send a payment proof as a JPG, PNG, or PDF file so I can check it properly."
+        return "Please send a payment document as a JPG, PNG, or PDF file so I can check it properly."
     return None
 
 
@@ -121,6 +145,8 @@ async def decide_inbound_action(db: Session, payload: dict) -> OrchestratorDecis
         action = "reply_processing_in_progress"
     elif wallet.balance <= 0 and pending_payment is not None:
         action = "reply_payment_pending"
+    elif _is_balance_message(text) and not has_supported_media:
+        action = "reply_balance"
     elif _is_help_message(text) and not has_supported_media:
         action = "reply_help"
     elif wallet.balance <= 0 and inferred_email:
@@ -184,8 +210,9 @@ async def decide_inbound_action(db: Session, payload: dict) -> OrchestratorDecis
         "active_request_status": active_request.status if active_request else None,
         "inferred_email": inferred_email,
     }
-    soft_actions = {"reply_help", "reply_waiting_for_proof", "reply_unsupported_input"}
+    soft_actions = {"reply_waiting_for_proof", "reply_unsupported_input"}
     reply_actions_with_fixed_copy = {
+        "reply_balance",
         "reply_help",
         "start_verification",
         "reply_recharge_required",
@@ -203,6 +230,7 @@ async def decide_inbound_action(db: Session, payload: dict) -> OrchestratorDecis
         selected_action,
         has_supported_media=has_supported_media,
         pending_payment=pending_payment,
+        wallet_balance=wallet.balance,
     )
     if selected_action in reply_actions_with_fixed_copy:
         reply_text = default_reply
