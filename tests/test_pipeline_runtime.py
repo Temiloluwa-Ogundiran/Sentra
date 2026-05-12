@@ -395,3 +395,16 @@ def test_run_pipeline_uses_reference_template_fields_when_hosted_is_skipped(monk
     assert result.verdict == "High-confidence pattern match"
     assert result.extracted_fields.reference == "REF123456789"
     assert "reference_template_match" in result.quality_flags
+
+
+def test_run_pipeline_flags_ai_generated_clone_corpus_sample():
+    sample_path = Path("tests/fixtures/ai_generated_moniepoint_clone.png")
+
+    result, _ = run_pipeline(
+        request_id=197,
+        file_path=sample_path,
+        mime_type="image/png",
+    )
+
+    assert result.verdict == "Suspicious"
+    assert "reference_clone_signal" in result.quality_flags
