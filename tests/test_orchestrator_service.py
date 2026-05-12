@@ -107,6 +107,38 @@ async def test_decide_inbound_action_initiates_recharge_from_email_message(monke
     assert checkout_calls == [("2349025283155@s.whatsapp.net", "temi@example.com", 500000, 20)]
 
 
+async def test_decide_inbound_action_handles_recharge_checkout_failure(monkeypatch):
+    session_local = _make_session()
+
+    async def fake_initiate_recharge_checkout(db, *, user, customer_email, amount_kobo, credits_to_add):
+        raise RuntimeError("Squad rejected request")
+
+    monkeypatch.setattr("app.services.orchestrator.initiate_recharge_checkout", fake_initiate_recharge_checkout)
+
+    with session_local() as db:
+        user = User(whatsapp_id="2349025283155@s.whatsapp.net")
+        db.add(user)
+        db.commit()
+        db.refresh(user)
+        db.add(CreditWallet(user_id=user.id, balance=0))
+        db.commit()
+
+        decision = await decide_inbound_action(
+            db,
+            payload={
+                "event": "message",
+                "payload": {
+                    "from": "2349025283155@s.whatsapp.net",
+                    "body": "recharge me with temi@example.com",
+                },
+            },
+    )
+
+    assert decision.action == "reply_recharge_required"
+    assert decision.start_verification is False
+    assert "could not create a recharge link" in (decision.reply_text or "").lower()
+
+
 async def test_decide_inbound_action_starts_verification_when_wallet_has_credit():
     session_local = _make_session()
 

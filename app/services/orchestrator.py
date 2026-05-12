@@ -120,35 +120,48 @@ async def decide_inbound_action(db: Session, payload: dict) -> OrchestratorDecis
     elif _is_help_message(text) and not has_supported_media:
         action = "reply_help"
     elif wallet.balance <= 0 and inferred_email:
-        transaction, checkout = await initiate_recharge_checkout(
-            db,
-            user=user,
-            customer_email=inferred_email,
-            amount_kobo=settings.recharge_amount_kobo,
-            credits_to_add=settings.recharge_credits_to_add,
-        )
-        checkout_data = checkout.get("data", {}) if isinstance(checkout, dict) else {}
-        checkout_url = checkout_data.get("checkout_url") or checkout_data.get("checkoutLink") or transaction.checkout_url
-        logger.info(
-            "orchestrator created recharge checkout",
-            extra={
-                "extra_payload": {
-                    "sender": sender,
-                    "user_id": user.id,
-                    "wallet_balance": wallet.balance,
-                    "transaction_ref": transaction.transaction_ref,
-                }
-            },
-        )
-        return OrchestratorDecision(
-            action="reply_recharge_checkout",
-            reply_text=(
-                f"Recharge link ready for {settings.recharge_credits_to_add} credits. Complete payment here: {checkout_url}"
-                if checkout_url
-                else "Recharge started. Complete the payment from the link we just created for you."
-            ),
-            checkout_url=checkout_url,
-        )
+        try:
+            transaction, checkout = await initiate_recharge_checkout(
+                db,
+                user=user,
+                customer_email=inferred_email,
+                amount_kobo=settings.recharge_amount_kobo,
+                credits_to_add=settings.recharge_credits_to_add,
+            )
+            checkout_data = checkout.get("data", {}) if isinstance(checkout, dict) else {}
+            checkout_url = checkout_data.get("checkout_url") or checkout_data.get("checkoutLink") or transaction.checkout_url
+            logger.info(
+                "orchestrator created recharge checkout",
+                extra={
+                    "extra_payload": {
+                        "sender": sender,
+                        "user_id": user.id,
+                        "wallet_balance": wallet.balance,
+                        "transaction_ref": transaction.transaction_ref,
+                    }
+                },
+            )
+            return OrchestratorDecision(
+                action="reply_recharge_checkout",
+                reply_text=(
+                    f"Recharge link ready for {settings.recharge_credits_to_add} credits. Complete payment here: {checkout_url}"
+                    if checkout_url
+                    else "Recharge started. Complete the payment from the link we just created for you."
+                ),
+                checkout_url=checkout_url,
+            )
+        except Exception:
+            logger.exception(
+                "failed to create recharge checkout",
+                extra={"extra_payload": {"sender": sender, "user_id": user.id, "email": inferred_email}},
+            )
+            return OrchestratorDecision(
+                action="reply_recharge_required",
+                reply_text=(
+                    "We could not create a recharge link right now. Please try again shortly or contact support, "
+                    "then send your email again for a new recharge link."
+                ),
+            )
     elif wallet.balance <= 0:
         action = "reply_recharge_required"
     elif has_supported_media:
