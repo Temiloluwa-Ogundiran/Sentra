@@ -28,15 +28,20 @@ def fuse_result(
     expected_amount: str | None = None,
     annotated_artifact_path: str | None = None,
 ) -> CanonicalResult:
+    strong_signal_count = sum(
+        flag in quality_flags for flag in ("synthetic_artifact_signal", "tamper_signal", "reasoner_suspicious_signal")
+    )
+    has_missing_reasons = any("missing" in reason.lower() or "not detected" in reason.lower() for reason in reasons)
+
     if "unreadable_artifact" in quality_flags or "low_resolution" in quality_flags:
         verdict = "Review"
         action = REVIEW_ACTION
-    elif "synthetic_artifact_signal" in quality_flags or "tamper_signal" in quality_flags:
+    elif strong_signal_count >= 2:
         verdict = "Suspicious"
         action = SUSPICIOUS_ACTION
-    elif any("missing" in reason.lower() for reason in reasons):
-        verdict = "Suspicious"
-        action = SUSPICIOUS_ACTION
+    elif strong_signal_count == 1 or has_missing_reasons:
+        verdict = "Review"
+        action = REVIEW_ACTION
     else:
         verdict = "High-confidence pattern match"
         action = MATCH_ACTION

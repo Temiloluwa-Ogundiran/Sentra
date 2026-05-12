@@ -76,4 +76,10 @@ async def send_result(whatsapp_id: str, result: CanonicalResult) -> None:
     )
     await client.send_text(whatsapp_id, message)
     if result.annotated_artifact_path and Path(result.annotated_artifact_path).exists():
-        await client.send_file(whatsapp_id, Path(result.annotated_artifact_path), caption="Sentra analysis preview")
+        try:
+            await client.send_file(whatsapp_id, Path(result.annotated_artifact_path), caption="Sentra analysis preview")
+        except Exception:
+            logger.exception(
+                "sending annotated preview failed",
+                extra={"extra_payload": {"whatsapp_id": whatsapp_id, "request_id": result.request_id}},
+            )

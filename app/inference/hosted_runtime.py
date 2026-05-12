@@ -13,7 +13,10 @@ def call_artifact_reasoner(file_path: Path, artifact_type: str) -> dict:
     prompt = (
         "You are analyzing a payment-proof artifact for fraud risk. "
         f"Artifact type guess: {artifact_type}. "
-        "Return concise JSON with keys: artifact_type_guess, suspicious_signals, trust_cues, summary."
+        "Return concise JSON with keys: artifact_type_guess, extracted_fields, suspicious_signals, trust_cues, summary. "
+        "For extracted_fields, return: amount, currency, date, time, reference, provider, recipient_label. "
+        "Only list suspicious_signals when there is concrete visual evidence of editing, inconsistency, or fabrication. "
+        "Do not list ordinary layout details as suspicious_signals."
     )
     client = ModalClient()
     return client.invoke_json(

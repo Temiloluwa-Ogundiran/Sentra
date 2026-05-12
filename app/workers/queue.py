@@ -72,6 +72,7 @@ class WorkerQueue:
             )
             notifier_stop = Event()
             stage_state = {"stage": "received"}
+            user_result_started = {"value": False}
 
             def stage_callback(stage: str) -> None:
                 stage_state["stage"] = stage
@@ -79,8 +80,6 @@ class WorkerQueue:
                     "pipeline stage transition",
                     extra={"extra_payload": {"request_id": request_id, "stage": stage}},
                 )
-                if user is not None:
-                    asyncio.run(send_processing_update(user.whatsapp_id, stage))
 
             def typing_loop() -> None:
                 if user is None:
@@ -127,11 +126,19 @@ class WorkerQueue:
                     stage_callback=stage_callback,
                 )
                 save_pipeline_result(db, request_id, result, debug)
-                asyncio.run(send_result(user.whatsapp_id if user else "dev-user", result))
+                if user is not None:
+                    try:
+                        user_result_started["value"] = True
+                        asyncio.run(send_result(user.whatsapp_id, result))
+                    except Exception:
+                        logger.exception(
+                            "final result delivery failed",
+                            extra={"extra_payload": {"request_id": request_id, "whatsapp_id": user.whatsapp_id}},
+                        )
             except Exception as exc:
                 logger.exception("request failed", extra={"extra_payload": {"request_id": request_id}})
                 mark_failed(db, request_id, str(exc))
-                if user is not None:
+                if user is not None and not user_result_started["value"]:
                     try:
                         asyncio.run(send_processing_update(user.whatsapp_id, "failed"))
                     except Exception:

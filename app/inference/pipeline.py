@@ -29,6 +29,27 @@ def _safe_model_call(label: str, fn, *args):
         return {"status": "error", "reason": str(exc)}
 
 
+def _normalize_field_value(value: str | None) -> str | None:
+    if value is None:
+        return None
+    cleaned = str(value).strip()
+    if not cleaned or cleaned.lower() in {"not detected", "unknown", "n/a", "null"}:
+        return None
+    return cleaned
+
+
+def _merge_extracted_fields(primary, fallback: dict | None):
+    if not isinstance(fallback, dict):
+        return primary
+    data = primary.model_dump()
+    for key, value in fallback.items():
+        if key not in data:
+            continue
+        if _normalize_field_value(data[key]) is None and _normalize_field_value(value) is not None:
+            data[key] = str(value).strip()
+    return type(primary)(**data)
+
+
 def run_pipeline(
     request_id: int,
     file_path: Path,
@@ -45,15 +66,16 @@ def run_pipeline(
         stage_callback("reading_proof")
     raw_text, extracted_fields = run_ocr(file_path)
     if stage_callback:
-        stage_callback("checking_details")
-    rule_hits, reasons = run_rules(artifact_type, raw_text, quality_flags)
-    if stage_callback:
         stage_callback("reviewing_changes")
     reasoner_response = _safe_model_call("artifact_reasoner", call_artifact_reasoner, file_path, artifact_type)
     tamper_response = _safe_model_call("tamper_detector", call_tamper_detector, file_path)
     synthetic_response = _safe_model_call(
         "synthetic_artifact_detector", call_synthetic_artifact_detector, file_path, artifact_type
     )
+    extracted_fields = _merge_extracted_fields(extracted_fields, reasoner_response.get("extracted_fields"))
+    if stage_callback:
+        stage_callback("checking_details")
+    rule_hits, reasons = run_rules(artifact_type, raw_text, extracted_fields, quality_flags)
     if reasoner_response.get("status") == "skipped":
         reasons.append("Hosted artifact reasoning was not configured.")
     if reasoner_response.get("status") == "error":
@@ -67,22 +89,19 @@ def run_pipeline(
     if synthetic_response.get("status") == "error":
         reasons.append("Synthetic-artifact detection is temporarily unavailable, so this result uses fallback checks.")
     synthetic_probability = synthetic_response.get("synthetic_probability")
-    if isinstance(synthetic_probability, (int, float)) and synthetic_probability >= 0.7:
-        reasons.append("This proof contains signals consistent with AI-generated or synthetic content.")
+    if isinstance(synthetic_probability, (int, float)) and synthetic_probability >= 0.85:
+        reasons.append("One of our image checks suggests this proof may not be an original banking artifact.")
         quality_flags.append("synthetic_artifact_signal")
     tamper_probability = tamper_response.get("tamper_probability")
-    if isinstance(tamper_probability, (int, float)) and tamper_probability >= 0.7:
-        reasons.append("This proof contains strong signals of manipulation or fraudulent editing.")
+    if isinstance(tamper_probability, (int, float)) and tamper_probability >= 0.85:
+        reasons.append("One image-integrity check raised a caution flag on this proof.")
         quality_flags.append("tamper_signal")
     suspicious_signals = reasoner_response.get("suspicious_signals")
     if isinstance(suspicious_signals, list):
-        reasons.extend(str(signal).strip() for signal in suspicious_signals if str(signal).strip())
-    trust_cues = reasoner_response.get("trust_cues")
-    if isinstance(trust_cues, list):
-        reasons.extend(str(cue).strip() for cue in trust_cues if str(cue).strip())
-    reasoner_summary = reasoner_response.get("summary") or reasoner_response.get("raw_text")
-    if isinstance(reasoner_summary, str) and reasoner_summary.strip():
-        reasons.append(reasoner_summary.strip())
+        normalized_signals = [str(signal).strip() for signal in suspicious_signals if str(signal).strip()]
+        if normalized_signals:
+            reasons.extend(normalized_signals)
+            quality_flags.append("reasoner_suspicious_signal")
     if stage_callback:
         stage_callback("finalizing")
     annotated = annotate_artifact(file_path, artifact_type, reasons, request_id)

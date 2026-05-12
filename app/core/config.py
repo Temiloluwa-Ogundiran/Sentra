@@ -24,7 +24,7 @@ class Settings(BaseSettings):
     readiness_require_hosted: bool = False
     recharge_amount_kobo: int = 500000
     recharge_credits_to_add: int = 20
-    processing_progress_interval_seconds: int = 30
+    processing_progress_interval_seconds: int = 60
     typing_refresh_interval_seconds: int = 6
 
     model_config = SettingsConfigDict(env_file=".env", case_sensitive=False, extra="ignore")
