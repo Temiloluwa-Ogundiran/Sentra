@@ -167,27 +167,30 @@ async def decide_inbound_action(db: Session, payload: dict) -> OrchestratorDecis
         "active_request_status": active_request.status if active_request else None,
         "inferred_email": inferred_email,
     }
-    allowed_actions = list(
-        dict.fromkeys(
-            [
-                action,
-                "reply_help",
-                "reply_waiting_for_proof",
-                "reply_recharge_required",
-                "reply_payment_pending",
-                "reply_processing_in_progress",
-                "reply_unsupported_input",
-                "start_verification",
-            ]
-        )
-    )
-    model_response = await choose_orchestrator_action(context, allowed_actions)
-    selected_action = model_response.action if model_response else action
-    reply_text = model_response.reply_text if model_response and model_response.reply_text else _default_reply(
+    soft_actions = {"reply_help", "reply_waiting_for_proof", "reply_unsupported_input"}
+    reply_actions_with_fixed_copy = {
+        "reply_help",
+        "start_verification",
+        "reply_recharge_required",
+        "reply_payment_pending",
+        "reply_processing_in_progress",
+        "reply_recharge_checkout",
+    }
+    model_response = None
+    if action in soft_actions:
+        allowed_actions = [action]
+        model_response = await choose_orchestrator_action(context, allowed_actions)
+
+    selected_action = action
+    default_reply = _default_reply(
         selected_action,
         has_supported_media=has_supported_media,
         pending_payment=pending_payment,
     )
+    if selected_action in reply_actions_with_fixed_copy:
+        reply_text = default_reply
+    else:
+        reply_text = model_response.reply_text if model_response and model_response.reply_text else default_reply
     logger.info(
         "orchestrator decision",
         extra={

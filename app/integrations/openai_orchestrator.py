@@ -83,6 +83,11 @@ async def choose_orchestrator_action(context: dict, allowed_actions: list[str]) 
             extra={"extra_payload": {"allowed_actions": allowed_actions, "context": context}},
         )
         return None
+    finally:
+        try:
+            await client.close()
+        except Exception:
+            logger.debug("openai client close failed")
 
     action = payload.get("action")
     if action not in allowed_actions:

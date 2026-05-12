@@ -38,10 +38,11 @@ class GowaClient:
             response.raise_for_status()
 
     async def send_chat_presence(self, to: str, presence: str = "composing", media_type: str = "text") -> None:
+        action = "stop" if presence in {"paused", "stop"} else "start"
         async with httpx.AsyncClient(timeout=20.0) as client:
             response = await client.post(
                 f"{self.base_url}/send/chat-presence",
-                json={"number": to, "presence": presence, "type": media_type},
+                json={"phone": to, "action": action},
                 headers=self.headers,
                 auth=self.auth,
             )

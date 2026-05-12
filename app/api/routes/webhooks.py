@@ -6,6 +6,7 @@ from app.core.config import settings
 from app.core.logging import get_logger
 from app.db.session import get_db
 from app.integrations.gowa import GowaClient
+from app.services.messaging import send_typing_indicator
 from app.services.orchestrator import decide_inbound_action
 from app.services.payments import process_squad_webhook
 from app.services.requests import create_request_from_gowa_event
@@ -48,17 +49,17 @@ async def gowa_webhook(
     try:
         if decision.start_verification:
             if sender:
-                await GowaClient().send_chat_presence(sender)
+                await send_typing_indicator(sender)
             request_id = await create_request_from_gowa_event(db=db, payload=payload)
             if sender and decision.reply_text:
                 await GowaClient().send_text(sender, decision.reply_text)
             worker_queue.enqueue(request_id)
         elif sender and decision.reply_text:
-            await GowaClient().send_chat_presence(sender)
+            await send_typing_indicator(sender)
             await GowaClient().send_text(sender, decision.reply_text)
     except InsufficientCreditsError:
         if sender and decision.reply_text:
-            await GowaClient().send_chat_presence(sender)
+            await send_typing_indicator(sender)
             await GowaClient().send_text(sender, decision.reply_text)
         return {"status": "insufficient_credits", "request_id": None}
     return {"status": "accepted", "request_id": request_id}
