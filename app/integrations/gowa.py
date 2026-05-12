@@ -29,12 +29,18 @@ class GowaClient:
 
     async def send_file(self, to: str, file_path: Path, caption: str | None = None) -> None:
         async with httpx.AsyncClient(timeout=30.0) as client:
-            response = await client.post(
-                f"{self.base_url}/send/file",
-                json={"phone": to, "filePath": str(file_path), "caption": caption or ""},
-                headers=self.headers,
-                auth=self.auth,
-            )
+            with file_path.open("rb") as file_handle:
+                response = await client.post(
+                    f"{self.base_url}/send/file",
+                    data={
+                        "phone": to,
+                        "caption": caption or "",
+                        "is_forwarded": "false",
+                    },
+                    files={"file": (file_path.name, file_handle, "application/octet-stream")},
+                    headers=self.headers,
+                    auth=self.auth,
+                )
             response.raise_for_status()
 
     async def send_chat_presence(self, to: str, presence: str = "composing", media_type: str = "text") -> None:
