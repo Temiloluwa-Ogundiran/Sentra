@@ -132,11 +132,47 @@ async def test_decide_inbound_action_handles_recharge_checkout_failure(monkeypat
                     "body": "recharge me with temi@example.com",
                 },
             },
-    )
+        )
 
     assert decision.action == "reply_recharge_required"
     assert decision.start_verification is False
     assert "could not create a recharge link" in (decision.reply_text or "").lower()
+
+
+async def test_decide_inbound_action_ignores_stale_pending_without_checkout_url():
+    session_local = _make_session()
+
+    with session_local() as db:
+        user = User(whatsapp_id="2349025283155@s.whatsapp.net")
+        db.add(user)
+        db.commit()
+        db.refresh(user)
+        db.add(CreditWallet(user_id=user.id, balance=0))
+        db.add(
+            PaymentTransaction(
+                user_id=user.id,
+                transaction_ref="sentra_stale_ref",
+                customer_email="temi@example.com",
+                amount_kobo=500000,
+                credits_to_add=20,
+                status="pending",
+                checkout_url=None,
+            )
+        )
+        db.commit()
+
+        decision = await decide_inbound_action(
+            db,
+            payload={
+                "event": "message",
+                "payload": {
+                    "from": "2349025283155@s.whatsapp.net",
+                    "body": "hello again",
+                },
+            },
+        )
+
+    assert decision.action == "reply_help"
 
 
 async def test_decide_inbound_action_starts_verification_when_wallet_has_credit():

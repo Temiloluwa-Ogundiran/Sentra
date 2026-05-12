@@ -49,7 +49,11 @@ def _is_recharge_message(text: str) -> bool:
 def _find_pending_payment(db: Session, user_id: int) -> PaymentTransaction | None:
     return (
         db.query(PaymentTransaction)
-        .filter(PaymentTransaction.user_id == user_id, PaymentTransaction.status == "pending")
+        .filter(
+            PaymentTransaction.user_id == user_id,
+            PaymentTransaction.status == "pending",
+            PaymentTransaction.checkout_url.is_not(None),
+        )
         .order_by(PaymentTransaction.created_at.desc())
         .first()
     )

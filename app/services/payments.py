@@ -67,13 +67,31 @@ async def initiate_recharge_checkout(
         amount_kobo=amount_kobo,
         credits_to_add=credits_to_add,
     )
-    checkout = await SquadClient().create_credit_checkout(
-        customer_email=customer_email,
-        amount_kobo=amount_kobo,
-        credits_to_add=credits_to_add,
-        user_id=user.id,
-        transaction_ref=transaction.transaction_ref,
-    )
+    try:
+        checkout = await SquadClient().create_credit_checkout(
+            customer_email=customer_email,
+            amount_kobo=amount_kobo,
+            credits_to_add=credits_to_add,
+            user_id=user.id,
+            transaction_ref=transaction.transaction_ref,
+        )
+    except Exception:
+        transaction.status = "failed"
+        transaction.squad_transaction_status = "checkout_failed"
+        db.commit()
+        db.refresh(transaction)
+        logger.exception(
+            "recharge checkout initiation failed",
+            extra={
+                "extra_payload": {
+                    "transaction_ref": transaction.transaction_ref,
+                    "user_id": user.id,
+                    "amount_kobo": amount_kobo,
+                    "credits_to_add": credits_to_add,
+                }
+            },
+        )
+        raise
     checkout_data = checkout.get("data", {}) if isinstance(checkout, dict) else {}
     transaction.checkout_url = checkout_data.get("checkout_url") or checkout_data.get("checkoutLink")
     db.commit()
