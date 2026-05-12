@@ -1,6 +1,7 @@
 from pathlib import Path
 from time import perf_counter
 
+from app.core.logging import get_logger
 from app.inference.annotate import annotate_artifact
 from app.inference.artifact_classifier import classify_artifact
 from app.inference.fusion import fuse_result
@@ -13,6 +14,19 @@ from app.inference.ocr import run_ocr
 from app.inference.quality import assess_quality
 from app.inference.rules import run_rules
 from app.schemas.common import CanonicalResult
+
+logger = get_logger(__name__)
+
+
+def _safe_model_call(label: str, fn, *args):
+    try:
+        return fn(*args)
+    except Exception as exc:
+        logger.exception(
+            "hosted inference call failed",
+            extra={"extra_payload": {"model_role": label, "error": str(exc)}},
+        )
+        return {"status": "error", "reason": str(exc)}
 
 
 def run_pipeline(
@@ -35,15 +49,23 @@ def run_pipeline(
     rule_hits, reasons = run_rules(artifact_type, raw_text, quality_flags)
     if stage_callback:
         stage_callback("reviewing_changes")
-    reasoner_response = call_artifact_reasoner(file_path, artifact_type)
-    tamper_response = call_tamper_detector(file_path)
-    synthetic_response = call_synthetic_artifact_detector(file_path, artifact_type)
+    reasoner_response = _safe_model_call("artifact_reasoner", call_artifact_reasoner, file_path, artifact_type)
+    tamper_response = _safe_model_call("tamper_detector", call_tamper_detector, file_path)
+    synthetic_response = _safe_model_call(
+        "synthetic_artifact_detector", call_synthetic_artifact_detector, file_path, artifact_type
+    )
     if reasoner_response.get("status") == "skipped":
         reasons.append("Hosted artifact reasoning was not configured.")
+    if reasoner_response.get("status") == "error":
+        reasons.append("Artifact reasoning is temporarily unavailable, so this result uses fallback checks.")
     if tamper_response.get("status") == "skipped":
         reasons.append("Hosted tamper analysis was not configured.")
+    if tamper_response.get("status") == "error":
+        reasons.append("Tamper analysis is temporarily unavailable, so this result uses fallback checks.")
     if synthetic_response.get("status") == "skipped":
         reasons.append("Hosted AI-generated artifact detection was not configured.")
+    if synthetic_response.get("status") == "error":
+        reasons.append("Synthetic-artifact detection is temporarily unavailable, so this result uses fallback checks.")
     synthetic_probability = synthetic_response.get("synthetic_probability")
     if isinstance(synthetic_probability, (int, float)) and synthetic_probability >= 0.7:
         reasons.append("This proof contains signals consistent with AI-generated or synthetic content.")

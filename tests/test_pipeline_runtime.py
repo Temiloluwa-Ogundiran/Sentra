@@ -66,3 +66,56 @@ def test_run_pipeline_combines_hosted_signals(monkeypatch, tmp_path):
     assert "Provider layout looks coherent" in result.reasons
     assert "This proof contains strong signals of manipulation or fraudulent editing." in result.reasons
     assert debug["model_scores"]["artifact_reasoner"]["summary"] == "Likely edited amount field."
+
+
+def test_run_pipeline_degrades_gracefully_when_reasoner_endpoint_fails(monkeypatch, tmp_path):
+    sample = tmp_path / "proof.png"
+    Image.new("RGB", (900, 1200), color="white").save(sample)
+
+    monkeypatch.setattr("app.inference.pipeline.classify_artifact", lambda file_path, mime_type: "bank_alert_screenshot")
+    monkeypatch.setattr("app.inference.pipeline.assess_quality", lambda file_path: [])
+    monkeypatch.setattr(
+        "app.inference.pipeline.run_ocr",
+        lambda file_path: (
+            "Amount NGN 25000\nRef TX123456789\nRecipient SENTRA STORE",
+            __import__("app.schemas.common", fromlist=["ExtractedFields"]).ExtractedFields(
+                amount="25000",
+                currency="NGN",
+                reference="TX123456789",
+                recipient_label="SENTRA STORE",
+            ),
+        ),
+    )
+    monkeypatch.setattr(
+        "app.inference.pipeline.run_rules",
+        lambda artifact_type, raw_text, quality_flags: (["reference.present"], ["Reference detected."]),
+    )
+
+    def failing_reasoner(file_path, artifact_type):
+        raise RuntimeError("404 hosted reasoner")
+
+    monkeypatch.setattr("app.inference.pipeline.call_artifact_reasoner", failing_reasoner)
+    monkeypatch.setattr(
+        "app.inference.pipeline.call_tamper_detector",
+        lambda file_path: {"status": "skipped", "reason": "missing_url"},
+    )
+    monkeypatch.setattr(
+        "app.inference.pipeline.call_synthetic_artifact_detector",
+        lambda file_path, artifact_type: {"status": "skipped", "reason": "missing_url"},
+    )
+    monkeypatch.setattr(
+        "app.inference.pipeline.annotate_artifact",
+        lambda file_path, artifact_type, reasons, request_id: tmp_path / "annotated.png",
+    )
+
+    result, debug = run_pipeline(
+        request_id=77,
+        file_path=sample,
+        mime_type="image/png",
+        expected_amount="25000",
+    )
+
+    assert result.request_id == 77
+    assert result.verdict in {"Review", "High-confidence pattern match", "Suspicious"}
+    assert any("unavailable" in reason.lower() or "not configured" in reason.lower() for reason in result.reasons)
+    assert debug["model_scores"]["artifact_reasoner"]["status"] == "error"
