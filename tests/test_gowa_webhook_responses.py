@@ -90,7 +90,7 @@ def test_gowa_webhook_replies_when_credits_are_exhausted(monkeypatch):
 
     assert response.status_code == 200
     assert response.json()["status"] == "insufficient_credits"
-    assert sent_typing == ["2349025283155@s.whatsapp.net", "2349025283155@s.whatsapp.net"]
+    assert sent_typing == ["2349025283155@s.whatsapp.net"]
     assert sent_messages == [
         (
             "2349025283155@s.whatsapp.net",

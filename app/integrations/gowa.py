@@ -20,7 +20,7 @@ class GowaClient:
     async def send_text(self, to: str, text: str) -> None:
         async with httpx.AsyncClient(timeout=20.0) as client:
             response = await client.post(
-                f"{self.base_url}/api/send/text",
+                f"{self.base_url}/send/message",
                 json={"phone": to, "message": text},
                 headers=self.headers,
                 auth=self.auth,

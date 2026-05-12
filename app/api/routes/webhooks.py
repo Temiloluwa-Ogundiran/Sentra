@@ -17,6 +17,19 @@ router = APIRouter()
 logger = get_logger(__name__)
 
 
+async def _send_reply(sender: str | None, text: str | None) -> None:
+    if not sender or not text:
+        return
+    try:
+        await send_typing_indicator(sender)
+        await GowaClient().send_text(sender, text)
+    except Exception:
+        logger.exception(
+            "failed to send gowa reply",
+            extra={"extra_payload": {"sender": sender, "reply_text": text}},
+        )
+
+
 @router.post("/gowa")
 async def gowa_webhook(
     payload: dict,
@@ -48,19 +61,13 @@ async def gowa_webhook(
     request_id = None
     try:
         if decision.start_verification:
-            if sender:
-                await send_typing_indicator(sender)
             request_id = await create_request_from_gowa_event(db=db, payload=payload)
-            if sender and decision.reply_text:
-                await GowaClient().send_text(sender, decision.reply_text)
+            await _send_reply(sender, decision.reply_text)
             worker_queue.enqueue(request_id)
-        elif sender and decision.reply_text:
-            await send_typing_indicator(sender)
-            await GowaClient().send_text(sender, decision.reply_text)
+        else:
+            await _send_reply(sender, decision.reply_text)
     except InsufficientCreditsError:
-        if sender and decision.reply_text:
-            await send_typing_indicator(sender)
-            await GowaClient().send_text(sender, decision.reply_text)
+        await _send_reply(sender, decision.reply_text)
         return {"status": "insufficient_credits", "request_id": None}
     return {"status": "accepted", "request_id": request_id}
 
