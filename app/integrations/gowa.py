@@ -19,21 +19,33 @@ class GowaClient:
 
     async def send_text(self, to: str, text: str) -> None:
         async with httpx.AsyncClient(timeout=20.0) as client:
-            await client.post(
+            response = await client.post(
                 f"{self.base_url}/api/send/text",
                 json={"phone": to, "message": text},
                 headers=self.headers,
                 auth=self.auth,
             )
+            response.raise_for_status()
 
     async def send_file(self, to: str, file_path: Path, caption: str | None = None) -> None:
         async with httpx.AsyncClient(timeout=30.0) as client:
-            await client.post(
+            response = await client.post(
                 f"{self.base_url}/api/send/file",
                 json={"phone": to, "filePath": str(file_path), "caption": caption or ""},
                 headers=self.headers,
                 auth=self.auth,
             )
+            response.raise_for_status()
+
+    async def send_chat_presence(self, to: str, presence: str = "composing", media_type: str = "text") -> None:
+        async with httpx.AsyncClient(timeout=20.0) as client:
+            response = await client.post(
+                f"{self.base_url}/send/chat-presence",
+                json={"number": to, "presence": presence, "type": media_type},
+                headers=self.headers,
+                auth=self.auth,
+            )
+            response.raise_for_status()
 
     async def fetch_media_bytes(self, media_url: str) -> bytes:
         resolved_url = media_url if media_url.startswith(("http://", "https://")) else urljoin(

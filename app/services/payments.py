@@ -6,9 +6,13 @@ from uuid import uuid4
 from sqlalchemy.orm import Session
 
 from app.integrations.squad import SquadClient
+from app.core.logging import get_logger
 from app.models.payment_transaction import PaymentTransaction
 from app.models.user import User
+from app.services.messaging import send_payment_success_message
 from app.services.wallets import apply_credit_recharge, get_or_create_wallet
+
+logger = get_logger(__name__)
 
 
 def create_payment_reference(prefix: str = "sentra") -> str:
@@ -34,6 +38,17 @@ def create_recharge_transaction(
     db.add(transaction)
     db.commit()
     db.refresh(transaction)
+    logger.info(
+        "created recharge transaction",
+        extra={
+            "extra_payload": {
+                "transaction_ref": transaction.transaction_ref,
+                "user_id": user.id,
+                "amount_kobo": amount_kobo,
+                "credits_to_add": credits_to_add,
+            }
+        },
+    )
     return transaction
 
 
@@ -63,6 +78,16 @@ async def initiate_recharge_checkout(
     transaction.checkout_url = checkout_data.get("checkout_url") or checkout_data.get("checkoutLink")
     db.commit()
     db.refresh(transaction)
+    logger.info(
+        "initiated recharge checkout",
+        extra={
+            "extra_payload": {
+                "transaction_ref": transaction.transaction_ref,
+                "user_id": user.id,
+                "checkout_url": transaction.checkout_url,
+            }
+        },
+    )
     return transaction, checkout
 
 
@@ -99,6 +124,17 @@ def apply_successful_recharge(
     transaction.applied_at = datetime.now(UTC)
     db.commit()
     db.refresh(transaction)
+    logger.info(
+        "applied successful recharge",
+        extra={
+            "extra_payload": {
+                "transaction_ref": transaction.transaction_ref,
+                "user_id": transaction.user_id,
+                "credits_to_add": transaction.credits_to_add,
+                "wallet_balance": wallet.balance,
+            }
+        },
+    )
     return transaction
 
 
@@ -132,6 +168,12 @@ async def process_squad_webhook(
 
     if squad_status == "success":
         transaction = apply_successful_recharge(db, transaction=transaction, squad_status=squad_status)
+        user = db.get(User, transaction.user_id)
+        if user is not None:
+            await send_payment_success_message(
+                user.whatsapp_id,
+                "Payment successful. Your Sentra credits have been added and you can now upload a proof for analysis.",
+            )
         return 200, {"status": "applied", "transaction_ref": transaction.transaction_ref}
 
     return 202, {"status": squad_status or "pending", "transaction_ref": transaction.transaction_ref}

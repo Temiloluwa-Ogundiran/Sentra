@@ -48,7 +48,12 @@ async def test_process_squad_webhook_applies_credits_once(monkeypatch):
     async def fake_verify(transaction_ref: str) -> dict:
         return {"data": {"transaction_status": "Success", "transaction_ref": transaction_ref}}
 
+    async def fake_notify(whatsapp_id: str, text: str) -> None:
+        notifications.append((whatsapp_id, text))
+
+    notifications: list[tuple[str, str]] = []
     monkeypatch.setattr("app.services.payments.verify_transaction_status", fake_verify)
+    monkeypatch.setattr("app.services.payments.send_payment_success_message", fake_notify)
 
     with session_local() as db:
         user = User(whatsapp_id="2348012345678")
@@ -80,3 +85,9 @@ async def test_process_squad_webhook_applies_credits_once(monkeypatch):
     assert response["status"] == "applied"
     assert updated.status == "applied"
     assert updated.applied_at is not None
+    assert notifications == [
+        (
+            "2348012345678",
+            "Payment successful. Your Sentra credits have been added and you can now upload a proof for analysis.",
+        )
+    ]

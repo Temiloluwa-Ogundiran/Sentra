@@ -15,12 +15,26 @@ from app.inference.rules import run_rules
 from app.schemas.common import CanonicalResult
 
 
-def run_pipeline(request_id: int, file_path: Path, mime_type: str, expected_amount: str | None = None) -> tuple[CanonicalResult, dict]:
+def run_pipeline(
+    request_id: int,
+    file_path: Path,
+    mime_type: str,
+    expected_amount: str | None = None,
+    stage_callback=None,
+) -> tuple[CanonicalResult, dict]:
     started = perf_counter()
+    if stage_callback:
+        stage_callback("preparing")
     artifact_type = classify_artifact(file_path, mime_type)
     quality_flags = assess_quality(file_path)
+    if stage_callback:
+        stage_callback("reading_proof")
     raw_text, extracted_fields = run_ocr(file_path)
+    if stage_callback:
+        stage_callback("checking_details")
     rule_hits, reasons = run_rules(artifact_type, raw_text, quality_flags)
+    if stage_callback:
+        stage_callback("reviewing_changes")
     reasoner_response = call_artifact_reasoner(file_path, artifact_type)
     tamper_response = call_tamper_detector(file_path)
     synthetic_response = call_synthetic_artifact_detector(file_path, artifact_type)
@@ -47,6 +61,8 @@ def run_pipeline(request_id: int, file_path: Path, mime_type: str, expected_amou
     reasoner_summary = reasoner_response.get("summary") or reasoner_response.get("raw_text")
     if isinstance(reasoner_summary, str) and reasoner_summary.strip():
         reasons.append(reasoner_summary.strip())
+    if stage_callback:
+        stage_callback("finalizing")
     annotated = annotate_artifact(file_path, artifact_type, reasons, request_id)
     processing_time_ms = int((perf_counter() - started) * 1000)
     result = fuse_result(

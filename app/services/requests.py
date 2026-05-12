@@ -4,6 +4,7 @@ from mimetypes import guess_type
 from fastapi import UploadFile
 from sqlalchemy.orm import Session
 
+from app.core.logging import get_logger
 from app.integrations.gowa import GowaClient
 from app.models.analysis_result import AnalysisResult
 from app.models.artifact import Artifact
@@ -20,6 +21,8 @@ SUPPORTED_MIME_TYPES = {
     "image/png",
     "application/pdf",
 }
+
+logger = get_logger(__name__)
 
 
 def _create_request_record(
@@ -38,6 +41,10 @@ def _create_request_record(
     db.add(request)
     db.commit()
     db.refresh(request)
+    logger.info(
+        "created verification request",
+        extra={"extra_payload": {"request_id": request.id, "whatsapp_id": whatsapp_id, "status": request.status}},
+    )
     return request
 
 
@@ -59,6 +66,17 @@ def _create_artifact_record(
     db.add(artifact)
     db.commit()
     db.refresh(artifact)
+    logger.info(
+        "stored artifact record",
+        extra={
+            "extra_payload": {
+                "request_id": request_id,
+                "mime_type": mime_type,
+                "original_filename": original_filename,
+                "file_size": file_size,
+            }
+        },
+    )
     return artifact
 
 
@@ -149,6 +167,17 @@ async def create_request_from_gowa_event(db: Session, payload: dict) -> int | No
     user = get_or_create_user(db, whatsapp_id)
     wallet = get_or_create_wallet(db, user.id)
     consume_verification_credit(db, wallet, cost=1)
+    logger.info(
+        "accepted inbound media for processing",
+        extra={
+            "extra_payload": {
+                "sender": whatsapp_id,
+                "wallet_balance_after_reserve": wallet.balance,
+                "mime_type": mime_type,
+                "filename": filename,
+            }
+        },
+    )
     client = GowaClient()
     content = await client.fetch_media_bytes(media_url)
     path, size = persist_bytes(content, filename)
@@ -192,6 +221,16 @@ def save_pipeline_result(db: Session, request_id: int, result: CanonicalResult, 
     db.add(extraction)
     db.add(analysis)
     db.commit()
+    logger.info(
+        "saved pipeline result",
+        extra={
+            "extra_payload": {
+                "request_id": request_id,
+                "verdict": result.verdict,
+                "processing_time_ms": result.processing_time_ms,
+            }
+        },
+    )
 
 
 def mark_failed(db: Session, request_id: int, reason: str) -> None:
@@ -199,6 +238,7 @@ def mark_failed(db: Session, request_id: int, reason: str) -> None:
     request.status = "failed"
     request.failure_reason = reason
     db.commit()
+    logger.error("marked request failed", extra={"extra_payload": {"request_id": request_id, "failure_reason": reason}})
 
 
 def fetch_result_payload(db: Session, request_id: int) -> dict:
