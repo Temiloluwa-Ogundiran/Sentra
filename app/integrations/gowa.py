@@ -43,6 +43,21 @@ class GowaClient:
                 )
             response.raise_for_status()
 
+    async def send_image(self, to: str, file_path: Path, caption: str | None = None) -> None:
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            with file_path.open("rb") as file_handle:
+                response = await client.post(
+                    f"{self.base_url}/send/image",
+                    data={
+                        "phone": to,
+                        "caption": caption or "",
+                    },
+                    files={"image": (file_path.name, file_handle, "image/png")},
+                    headers=self.headers,
+                    auth=self.auth,
+                )
+            response.raise_for_status()
+
     async def send_chat_presence(self, to: str, presence: str = "composing", media_type: str = "text") -> None:
         action = "stop" if presence in {"paused", "stop"} else "start"
         async with httpx.AsyncClient(timeout=20.0) as client:

@@ -156,6 +156,21 @@ def _has_marker_overlay(rgb: np.ndarray) -> bool:
     return best_area >= 700 and best_fill >= 0.45
 
 
+def _looks_like_synthetic_render(rgb: np.ndarray) -> bool:
+    grayscale = np.dot(rgb[..., :3], [0.299, 0.587, 0.114]).astype(np.float32)
+    height, width = grayscale.shape
+    grad_x = np.abs(np.diff(grayscale, axis=1))
+    grad_y = np.abs(np.diff(grayscale, axis=0))
+    gradients = np.concatenate([grad_x.ravel(), grad_y.ravel()])
+    if gradients.size == 0:
+        return False
+
+    global_p95 = float(np.quantile(gradients, 0.95))
+    body = grayscale[int(height * 0.30) : int(height * 0.80), int(width * 0.08) : int(width * 0.92)]
+    body_std = float(body.std()) if body.size else 0.0
+    return global_p95 <= 8.0 and body_std >= 45.0
+
+
 def assess_quality(file_path: Path) -> list[str]:
     flags: list[str] = []
     try:
@@ -177,6 +192,8 @@ def assess_quality(file_path: Path) -> list[str]:
                 elif _has_marker_overlay(rgb):
                     flags.append("edited_overlay_signal")
                 else:
+                    if _looks_like_synthetic_render(rgb):
+                        flags.append("synthetic_render_signal")
                     reference_match = _find_reference_match(file_path, rgb_image)
                     if reference_match and reference_match[0] == "clone":
                         flags.append("reference_clone_signal")

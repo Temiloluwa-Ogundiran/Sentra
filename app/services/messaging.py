@@ -42,6 +42,10 @@ def render_whatsapp_message(result: CanonicalResult) -> str:
     )
 
 
+def _should_send_visual_preview(result: CanonicalResult) -> bool:
+    return "edited_overlay_signal" in result.quality_flags
+
+
 async def send_typing_indicator(whatsapp_id: str) -> None:
     logger.info("sending typing indicator", extra={"extra_payload": {"whatsapp_id": whatsapp_id}})
     try:
@@ -80,9 +84,9 @@ async def send_result(whatsapp_id: str, result: CanonicalResult) -> None:
         extra={"extra_payload": {"whatsapp_id": whatsapp_id, "request_id": result.request_id}},
     )
     await client.send_text(whatsapp_id, message)
-    if result.annotated_artifact_path and Path(result.annotated_artifact_path).exists():
+    if _should_send_visual_preview(result) and result.annotated_artifact_path and Path(result.annotated_artifact_path).exists():
         try:
-            await client.send_file(whatsapp_id, Path(result.annotated_artifact_path), caption="Sentra analysis preview")
+            await client.send_image(whatsapp_id, Path(result.annotated_artifact_path), caption="Sentra analysis preview")
         except Exception:
             logger.exception(
                 "sending annotated preview failed",

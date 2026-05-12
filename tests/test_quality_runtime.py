@@ -1,3 +1,5 @@
+from pathlib import Path
+
 from PIL import Image, ImageDraw
 
 from app.inference.quality import assess_quality
@@ -64,3 +66,12 @@ def test_assess_quality_flags_reference_template_match(monkeypatch, tmp_path):
     flags = assess_quality(reference_path)
 
     assert "reference_template_match" in flags
+
+
+def test_assess_quality_flags_synthetic_render_signal(monkeypatch):
+    sample_path = Path("tests/fixtures/ai_generated_moniepoint_clone.png")
+    monkeypatch.setattr("app.inference.quality._find_reference_match", lambda file_path, image: None)
+
+    flags = assess_quality(sample_path)
+
+    assert "synthetic_render_signal" in flags

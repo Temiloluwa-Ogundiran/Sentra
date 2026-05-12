@@ -20,6 +20,10 @@ logger = get_logger(__name__)
 HOSTED_EXECUTOR = ThreadPoolExecutor(max_workers=3)
 
 
+def _should_generate_annotation(quality_flags: list[str]) -> bool:
+    return "edited_overlay_signal" in quality_flags
+
+
 def _safe_model_call(label: str, fn, *args):
     try:
         return fn(*args)
@@ -77,7 +81,8 @@ def run_pipeline(
     if stage_callback:
         stage_callback("reviewing_changes")
     should_skip_hosted = mime_type == "application/pdf" or any(
-        flag in quality_flags for flag in ("edited_overlay_signal", "reference_clone_signal", "reference_template_match")
+        flag in quality_flags
+        for flag in ("edited_overlay_signal", "reference_clone_signal", "reference_template_match", "synthetic_render_signal")
     )
     if should_skip_hosted:
         reasoner_response = {"status": "not_applicable"}
@@ -143,7 +148,7 @@ def run_pipeline(
         reasons.extend(str(cue).strip() for cue in trust_cues[:2] if str(cue).strip())
     if stage_callback:
         stage_callback("finalizing")
-    annotated = annotate_artifact(file_path, artifact_type, reasons, request_id)
+    annotated = annotate_artifact(file_path, artifact_type, reasons, request_id) if _should_generate_annotation(quality_flags) else None
     processing_time_ms = int((perf_counter() - started) * 1000)
     result = fuse_result(
         request_id=request_id,
@@ -153,7 +158,7 @@ def run_pipeline(
         quality_flags=quality_flags,
         processing_time_ms=processing_time_ms,
         expected_amount=expected_amount,
-        annotated_artifact_path=str(annotated),
+        annotated_artifact_path=str(annotated) if annotated else None,
     )
     debug = {
         "raw_text": raw_text,

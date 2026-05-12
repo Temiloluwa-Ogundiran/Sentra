@@ -47,11 +47,6 @@ def test_run_pipeline_combines_hosted_signals(monkeypatch, tmp_path):
             "predictions": [{"label": "by human", "score": 0.88}],
         },
     )
-    monkeypatch.setattr(
-        "app.inference.pipeline.annotate_artifact",
-        lambda file_path, artifact_type, reasons, request_id: tmp_path / "annotated.png",
-    )
-
     result, debug = run_pipeline(
         request_id=42,
         file_path=sample,
@@ -61,7 +56,7 @@ def test_run_pipeline_combines_hosted_signals(monkeypatch, tmp_path):
 
     assert result.request_id == 42
     assert result.extracted_fields.amount == "25000"
-    assert result.annotated_artifact_path == str(tmp_path / "annotated.png")
+    assert result.annotated_artifact_path is None
     assert "Amount region edited" in result.reasons
     assert "Provider layout looks coherent" not in result.reasons
     assert "One image-integrity check raised a caution flag on this payment document." in result.reasons
@@ -408,3 +403,34 @@ def test_run_pipeline_flags_ai_generated_clone_corpus_sample():
 
     assert result.verdict == "Suspicious"
     assert "reference_clone_signal" in result.quality_flags
+
+
+def test_run_pipeline_flags_ai_generated_sample_even_without_reference_clone(monkeypatch):
+    sample_path = Path("tests/fixtures/ai_generated_moniepoint_clone.png")
+
+    monkeypatch.setattr(
+        "app.inference.pipeline.assess_quality",
+        lambda file_path: ["synthetic_render_signal"],
+    )
+    monkeypatch.setattr("app.inference.pipeline.lookup_reference_template_fields", lambda file_path: None)
+    monkeypatch.setattr(
+        "app.inference.pipeline.call_artifact_reasoner",
+        lambda *args: (_ for _ in ()).throw(AssertionError("artifact reasoner should not be required for synthetic render flag")),
+    )
+    monkeypatch.setattr(
+        "app.inference.pipeline.call_tamper_detector",
+        lambda *args: (_ for _ in ()).throw(AssertionError("tamper should not be required for synthetic render flag")),
+    )
+    monkeypatch.setattr(
+        "app.inference.pipeline.call_synthetic_artifact_detector",
+        lambda *args: (_ for _ in ()).throw(AssertionError("synthetic endpoint should not be required for synthetic render flag")),
+    )
+
+    result, _ = run_pipeline(
+        request_id=198,
+        file_path=sample_path,
+        mime_type="image/png",
+    )
+
+    assert result.verdict == "Suspicious"
+    assert "synthetic_render_signal" in result.quality_flags
