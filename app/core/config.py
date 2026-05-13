@@ -26,7 +26,7 @@ class Settings(BaseSettings):
     recharge_credits_to_add: int = 20
     processing_progress_interval_seconds: int = 60
     typing_refresh_interval_seconds: int = 6
-    hosted_inference_timeout_seconds: int = 25
+    hosted_inference_timeout_seconds: int = 90
 
     model_config = SettingsConfigDict(env_file=".env", case_sensitive=False, extra="ignore")
 
