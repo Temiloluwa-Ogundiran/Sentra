@@ -434,3 +434,24 @@ def test_run_pipeline_flags_ai_generated_sample_even_without_reference_clone(mon
 
     assert result.verdict == "Suspicious"
     assert "synthetic_render_signal" in result.quality_flags
+
+
+def test_run_pipeline_marks_visible_green_edit_anywhere_as_suspicious(tmp_path):
+    sample = tmp_path / "proof.png"
+    image = Image.new("RGB", (720, 1280), "white")
+    draw = ImageDraw.Draw(image)
+    draw.rounded_rectangle((80, 180, 640, 1040), radius=24, fill=(250, 250, 250))
+    draw.text((120, 260), "N10,000.00", fill=(20, 20, 20))
+    draw.text((120, 620), "TEMILOLUWA SAMUEL OGUNDIRAN", fill=(20, 20, 20))
+    draw.line((430, 640, 520, 630), fill=(40, 255, 160), width=20)
+    image.save(sample)
+
+    result, _ = run_pipeline(
+        request_id=199,
+        file_path=sample,
+        mime_type="image/png",
+    )
+
+    assert result.verdict == "Suspicious"
+    assert "edited_overlay_signal" in result.quality_flags
+    assert result.annotated_artifact_path is not None

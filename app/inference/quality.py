@@ -1,5 +1,5 @@
-from pathlib import Path
 import json
+from pathlib import Path
 
 import fitz
 import numpy as np
@@ -99,28 +99,17 @@ def lookup_reference_template_fields(file_path: Path) -> dict[str, str] | None:
 
 
 def _has_marker_overlay(rgb: np.ndarray) -> bool:
-    height, width = rgb.shape[:2]
-    top = int(height * 0.14)
-    bottom = int(height * 0.25)
-    left = int(width * 0.18)
-    right = int(width * 0.62)
-    if bottom <= top or right <= left:
-        return False
+    return bool(_find_edit_regions(rgb))
 
-    region = rgb[top:bottom, left:right]
-    marker_mask = (
-        (region[:, :, 1] > 180)
-        & (region[:, :, 0] < 180)
-        & (region[:, :, 2] < 180)
-    )
-    if not marker_mask.any():
-        return False
 
-    visited = np.zeros(marker_mask.shape, dtype=bool)
-    best_area = 0
-    best_fill = 0.0
+def _extract_mask_regions(mask: np.ndarray, min_area: int = 280) -> list[tuple[int, int, int, int]]:
+    if not mask.any():
+        return []
 
-    for start_y, start_x in np.argwhere(marker_mask):
+    visited = np.zeros(mask.shape, dtype=bool)
+    regions: list[tuple[int, int, int, int]] = []
+
+    for start_y, start_x in np.argwhere(mask):
         if visited[start_y, start_x]:
             continue
         stack = [(int(start_y), int(start_x))]
@@ -139,9 +128,9 @@ def _has_marker_overlay(rgb: np.ndarray) -> bool:
 
             for next_y, next_x in ((y - 1, x), (y + 1, x), (y, x - 1), (y, x + 1)):
                 if (
-                    0 <= next_y < marker_mask.shape[0]
-                    and 0 <= next_x < marker_mask.shape[1]
-                    and marker_mask[next_y, next_x]
+                    0 <= next_y < mask.shape[0]
+                    and 0 <= next_x < mask.shape[1]
+                    and mask[next_y, next_x]
                     and not visited[next_y, next_x]
                 ):
                     visited[next_y, next_x] = True
@@ -149,11 +138,57 @@ def _has_marker_overlay(rgb: np.ndarray) -> bool:
 
         bbox_area = (max_x - min_x + 1) * (max_y - min_y + 1)
         fill_ratio = area / max(bbox_area, 1)
-        if area > best_area:
-            best_area = area
-            best_fill = fill_ratio
+        if area >= min_area and fill_ratio >= 0.04:
+            regions.append((min_x, min_y, max_x, max_y))
 
-    return best_area >= 700 and best_fill >= 0.45
+    return regions
+
+
+def _merge_nearby_regions(regions: list[tuple[int, int, int, int]], padding: int = 12) -> list[tuple[int, int, int, int]]:
+    merged: list[list[int]] = []
+    for min_x, min_y, max_x, max_y in regions:
+        expanded = [min_x - padding, min_y - padding, max_x + padding, max_y + padding]
+        attached = False
+        for candidate in merged:
+            overlaps = not (
+                expanded[2] < candidate[0]
+                or expanded[0] > candidate[2]
+                or expanded[3] < candidate[1]
+                or expanded[1] > candidate[3]
+            )
+            if overlaps:
+                candidate[0] = min(candidate[0], expanded[0])
+                candidate[1] = min(candidate[1], expanded[1])
+                candidate[2] = max(candidate[2], expanded[2])
+                candidate[3] = max(candidate[3], expanded[3])
+                attached = True
+                break
+        if not attached:
+            merged.append(expanded)
+    return [tuple(region) for region in merged]
+
+
+def _find_edit_regions(rgb: np.ndarray) -> list[tuple[int, int, int, int]]:
+    green_mask = (
+        (rgb[:, :, 1] > 170)
+        & (rgb[:, :, 0] < 190)
+        & (rgb[:, :, 2] < 190)
+    )
+    red_mask = (
+        (rgb[:, :, 0] > 180)
+        & (rgb[:, :, 1] < 120)
+        & (rgb[:, :, 2] < 120)
+    )
+    regions = _extract_mask_regions(green_mask) + _extract_mask_regions(red_mask)
+    return _merge_nearby_regions(regions)
+
+
+def find_visible_edit_regions(file_path: Path) -> list[tuple[int, int, int, int]]:
+    if file_path.suffix.lower() not in {".jpg", ".jpeg", ".png"}:
+        return []
+    with Image.open(file_path) as image:
+        rgb = np.array(image.convert("RGB"))
+    return _find_edit_regions(rgb)
 
 
 def _looks_like_synthetic_render(rgb: np.ndarray) -> bool:
@@ -186,10 +221,7 @@ def assess_quality(file_path: Path) -> list[str]:
                 width, height = image.size
                 rgb_image = image.convert("RGB")
                 rgb = np.array(rgb_image)
-                red_mask = (rgb[:, :, 0] > 180) & (rgb[:, :, 1] < 110) & (rgb[:, :, 2] < 110)
-                if red_mask.mean() > 0.01:
-                    flags.append("edited_overlay_signal")
-                elif _has_marker_overlay(rgb):
+                if _has_marker_overlay(rgb):
                     flags.append("edited_overlay_signal")
                 else:
                     if _looks_like_synthetic_render(rgb):

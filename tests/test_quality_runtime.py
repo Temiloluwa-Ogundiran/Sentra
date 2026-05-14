@@ -2,7 +2,7 @@ from pathlib import Path
 
 from PIL import Image, ImageDraw
 
-from app.inference.quality import assess_quality
+from app.inference.quality import assess_quality, find_visible_edit_regions
 
 
 def test_assess_quality_flags_obvious_red_edit_overlay(tmp_path):
@@ -30,6 +30,24 @@ def test_assess_quality_flags_green_marker_over_amount_region(tmp_path):
     flags = assess_quality(path)
 
     assert "edited_overlay_signal" in flags
+
+
+def test_assess_quality_flags_green_marker_outside_amount_region(tmp_path):
+    path = tmp_path / "tampered_notes.jpg"
+    image = Image.new("RGB", (720, 1280), "white")
+    draw = ImageDraw.Draw(image)
+    draw.rounded_rectangle((80, 180, 640, 1040), radius=24, fill=(250, 250, 250))
+    draw.text((120, 260), "N10,000.00", fill=(20, 20, 20))
+    draw.text((120, 620), "TEMILOLUWA SAMUEL OGUNDIRAN", fill=(20, 20, 20))
+    draw.line((430, 640, 520, 630), fill=(40, 255, 160), width=20)
+    draw.line((250, 900, 270, 980), fill=(40, 255, 160), width=20)
+    image.save(path)
+
+    flags = assess_quality(path)
+    regions = find_visible_edit_regions(path)
+
+    assert "edited_overlay_signal" in flags
+    assert len(regions) >= 2
 
 
 def test_assess_quality_flags_reference_clone_signal(monkeypatch, tmp_path):

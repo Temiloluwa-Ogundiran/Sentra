@@ -4,6 +4,7 @@ import fitz
 from PIL import Image, ImageDraw
 
 from app.core.config import settings
+from app.inference.quality import find_visible_edit_regions
 
 
 def annotate_artifact(source_path: Path, artifact_type: str, reasons: list[str], request_id: int) -> Path:
@@ -24,8 +25,9 @@ def annotate_artifact(source_path: Path, artifact_type: str, reasons: list[str],
 
     with Image.open(source_path) as image:
         draw = ImageDraw.Draw(image)
-        width, height = image.size
-        draw.rectangle([(width * 0.55, height * 0.2), (width * 0.92, height * 0.35)], outline="red", width=4)
+        regions = find_visible_edit_regions(source_path)
+        for min_x, min_y, max_x, max_y in regions:
+            draw.rectangle([(min_x, min_y), (max_x, max_y)], outline="red", width=4)
         draw.text((10, 10), artifact_type, fill="red")
         image.save(target)
     return target
