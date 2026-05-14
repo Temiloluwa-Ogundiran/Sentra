@@ -138,7 +138,10 @@ def _extract_mask_regions(mask: np.ndarray, min_area: int = 280) -> list[tuple[i
 
         bbox_area = (max_x - min_x + 1) * (max_y - min_y + 1)
         fill_ratio = area / max(bbox_area, 1)
-        if area >= min_area and fill_ratio >= 0.04:
+        width = max_x - min_x + 1
+        height = max_y - min_y + 1
+        elongation = max(width / max(height, 1), height / max(width, 1))
+        if area >= min_area and fill_ratio >= 0.04 and elongation >= 1.5 and max(width, height) >= 36:
             regions.append((min_x, min_y, max_x, max_y))
 
     return regions

@@ -50,6 +50,22 @@ def test_assess_quality_flags_green_marker_outside_amount_region(tmp_path):
     assert len(regions) >= 2
 
 
+def test_assess_quality_ignores_square_green_ui_elements(tmp_path):
+    path = tmp_path / "legit_green_ui.jpg"
+    image = Image.new("RGB", (720, 1280), "white")
+    draw = ImageDraw.Draw(image)
+    draw.rounded_rectangle((80, 180, 640, 1040), radius=24, fill=(250, 250, 250))
+    draw.rounded_rectangle((100, 260, 150, 310), radius=8, fill=(40, 220, 140))
+    draw.rounded_rectangle((260, 250, 320, 320), radius=10, fill=(40, 220, 140))
+    image.save(path)
+
+    flags = assess_quality(path)
+    regions = find_visible_edit_regions(path)
+
+    assert "edited_overlay_signal" not in flags
+    assert regions == []
+
+
 def test_assess_quality_flags_reference_clone_signal(monkeypatch, tmp_path):
     path = tmp_path / "candidate.jpg"
     Image.new("RGB", (540, 960), "#1155dd").save(path)
