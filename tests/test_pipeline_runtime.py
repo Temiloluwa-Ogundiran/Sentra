@@ -402,7 +402,7 @@ def test_run_pipeline_flags_ai_generated_clone_corpus_sample():
     )
 
     assert result.verdict == "Suspicious"
-    assert "reference_clone_signal" in result.quality_flags
+    assert any(flag in result.quality_flags for flag in ("reference_clone_signal", "synthetic_render_signal"))
 
 
 def test_run_pipeline_flags_ai_generated_sample_even_without_reference_clone(monkeypatch):

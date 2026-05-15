@@ -64,7 +64,6 @@ def render_whatsapp_message(result: CanonicalResult) -> str:
             f"• Date: {fields.date or 'Not detected'}",
             f"• Time: {fields.time or 'Not detected'}",
             f"• Reference: {fields.reference or 'Not detected'}",
-            f"• Provider: {fields.provider or 'Not detected'}",
             f"• Recipient: {fields.recipient_label or 'Not detected'}",
             "",
             "Why we said this",

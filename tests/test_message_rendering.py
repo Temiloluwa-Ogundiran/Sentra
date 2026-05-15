@@ -89,3 +89,24 @@ def test_message_hides_system_time_reason():
 
     assert "current system time" not in message
     assert "consistent and typical for a bank transfer" in message
+
+
+def test_message_hides_provider_field():
+    result = CanonicalResult(
+        request_id=5,
+        artifact_type="bank_alert_screenshot",
+        verdict="High-confidence pattern match",
+        recommended_action="Proceed at your discretion.",
+        extracted_fields=ExtractedFields(provider="CREDIT", recipient_label="Jane Doe"),
+        reasons=["The transaction details appear consistent."],
+        quality_flags=[],
+        annotated_artifact_path=None,
+        processing_time_ms=300,
+        expected_amount=None,
+    )
+
+    message = render_whatsapp_message(result)
+
+    assert "Provider:" not in message
+    assert "CREDIT" not in message
+    assert "Recipient: Jane Doe" in message
