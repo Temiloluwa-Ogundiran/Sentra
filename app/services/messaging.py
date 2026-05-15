@@ -33,6 +33,8 @@ def _sanitize_user_reason(reason: str) -> str | None:
 
     if "temporarily unavailable" in lowered or "fallback checks" in lowered:
         return None
+    if "current system time" in lowered:
+        return None
     if "image-integrity check raised a caution flag" in lowered:
         return "This payment document may have been edited."
     return normalized

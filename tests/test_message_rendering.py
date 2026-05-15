@@ -66,3 +66,26 @@ def test_message_hides_internal_fallback_wording():
     assert "temporarily unavailable" not in message
     assert "fallback checks" not in message
     assert "This payment document may have been edited." in message
+
+
+def test_message_hides_system_time_reason():
+    result = CanonicalResult(
+        request_id=4,
+        artifact_type="bank_alert_screenshot",
+        verdict="High-confidence pattern match",
+        recommended_action="Proceed at your discretion.",
+        extracted_fields=ExtractedFields(),
+        reasons=[
+            "The transaction details appear to be consistent and typical for a bank transfer.",
+            "The date and time match the current system time.",
+        ],
+        quality_flags=[],
+        annotated_artifact_path=None,
+        processing_time_ms=300,
+        expected_amount=None,
+    )
+
+    message = render_whatsapp_message(result)
+
+    assert "current system time" not in message
+    assert "consistent and typical for a bank transfer" in message
